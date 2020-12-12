@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 import torch as tc
-import BasicFun as bf
+import other.BasicFun as bf
 import matplotlib.pyplot as plt
 
 
