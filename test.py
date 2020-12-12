@@ -5,8 +5,19 @@ import matplotlib.pyplot as plt
 import cv2
 import MPS
 
-x = MPS.mps(d = 5, chi = 10, length = 2)
-# tensor0 = copy.deepcopy(x.tensors)
-x.center_orth(center = 0, cut_dim = 6)
-tensor = x.get_tensor(1)
-np.tensordot(tensor,tensor,[[1],[1]])
+x = MPS.mps(d = 4, chi = 10, length = 4)
+print(x.virtdim)
+for n in range(0,x.length):
+    print(x.tensors[n].shape,end=' ')
+x.orth_right2left(3, cut_dim = 6)
+print('\n',x.virtdim)
+for n in range(0,x.length):
+    print(x.tensors[n].shape,end=' ')
+x.orth_right2left(2, cut_dim = 6)
+print('\n',x.virtdim)
+for n in range(0,x.length):
+    print(x.tensors[n].shape,end=' ')
+x.orth_right2left(1, cut_dim = 6)
+print('\n',x.virtdim)
+for n in range(0,x.length):
+    print(x.tensors[n].shape,end=' ')

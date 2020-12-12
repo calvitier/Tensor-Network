@@ -171,7 +171,6 @@ class mps:
             tensor = tensor.reshape(self.virtdim[nt-1]*self.physdim[nt], self.virtdim[nt])
             u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
             u = u.reshape(self.virtdim[nt-1], self.physdim[nt], -1)
-
         self.tensors[nt] = u
         if normalize:
             r /= np.linalg.norm(r)
@@ -210,12 +209,11 @@ class mps:
             tensor = tensor.reshape(self.virtdim[nt-1], self.physdim[nt]*self.virtdim[nt]).T
             u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
             u = u.T.reshape(-1, self.physdim[nt], self.virtdim[nt])
-
         self.tensors[nt] = u
         if normalize:
             r /= np.linalg.norm(r)
         tensor_ = self.get_tensor(nt-1, False)
-        tensor_ = np.tensordot(r, tensor_, [[1], [-1]])
+        tensor_ = np.tensordot(tensor_, r, [[-1], [1]])
         self.tensors[nt-1] = tensor_
         self.virtdim[nt-1] = r.shape[0]
         return lm
