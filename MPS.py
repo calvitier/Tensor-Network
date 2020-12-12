@@ -8,7 +8,8 @@ class mps:
 
     """
     ！！！重要成员函数！！！
-    - init_tensor：随机初始化张量，或输入指定张量列表，需满足注1要求
+    - init_tensor：输入指定张量列表，需满足注中要求
+    - init_rand: 随机初始化
     - mps2tensor: 收缩所有虚拟指标，返回MPS代表张量
     - mps2vec: 收缩所有虚拟指标，将MPS代表张量转化为向量输出
     - center_orth：指定正交中心，对MPS进行中心正交化，或移动MPS正交中心至指定位置
@@ -31,19 +32,21 @@ class mps:
     
     """
 
-    def __init__(self):
+    def __init__(self, tensors):
         """
-        :param d: 物理指标维数
-        :param chi: 辅助指标截断维数
         :param length: 张量个数
-
-        :param d: physical bond dimension
-        :param chi: virtual bond dimension cut-off
-        :param length: number of tensors
-        
+        :param center: 正交中心 为负数时，MPS非中心正交
         """
-        self.center = -1  # 正交中心 当center为负数时，MPS非中心正交
+        self.length = len(tensors)
+        self.tensors = copy.deepcopy(tensors)
+        self.center = -1
         self.dtype = None
+        self.physdim = [self.tensors[0].shape[0]]
+        self.virtdim = list()
+        for n in range(1, self.length):
+            self.physdim += [self.tensors[n].shape[1]]
+            self.virtdim += [self.tensors[n].shape[0]]
+
         
     @classmethod
     def init_rand(cls, d, chi, length):
@@ -51,39 +54,17 @@ class mps:
         随机初始化
 
         """
-        cls.d = d  # physical bond dimension
-        cls.chi = chi  # cut off dimension
-        cls.length = length  # number of tensors
-        cls.tensors = list()  # tensors in MPS
-        cls.physdim = list()  # physical bond dimensions
-        cls.virtdim = list()  # virtual bond dimensions
-        cls.init()
-        cls.tensors = [np.random.randn(cls.d, cls.chi)]
-        for n in range(1,cls.length-1):
-            cls.tensors += [np.random.randn(cls.chi, cls.d, cls.chi)]
-        cls.tensors += [np.random.randn(cls.chi, cls.d)]
-        cls.virtdim = [cls.chi] * (cls.length - 1)
-        cls.physdim = [cls.d] * cls.length
+        tensors = [np.random.randn(d, chi)]
+        for _ in range(1,length-1):
+            tensors += [np.random.randn(chi, d, chi)]
+        tensors += [np.random.randn(chi, d)]
+        return cls(tensors)
 
     @classmethod
-    def init_tensors(cls, tensors):
-        cls.length = len(tensors)-1  # number of tensors
-        cls.tensors = list()  # tensors in MPS
-        cls.physdim = list()  # physical bond dimensions
-        cls.virtdim = list()  # virtual bond dimensions
-        cls.center = -1  # 正交中心 当center为负数时，MPS非中心正交
-        cls.dtype = None
-        
-        for n in range(0, cls.length):
+    def init_tensors(cls, tensors):  
+        for n in range(0, len(tensors)-1):
             assert tensors[n].shape[-1] == tensors[n+1].shape[0]
-            cls.virtdim += [cls.tensors[n].shape[0]]
-
-        for n in range(0,cls.length):
-            cls.tensors += [copy.deepcopy(tensors[n])]
-            cls.physdim[n] = tensors[n].shape[1]
-        cls.physdim[0] = tensors[n].shape[0]
-
-        return cls()
+        return cls(tensors)
 
     def mps2tensor(self):
         """
