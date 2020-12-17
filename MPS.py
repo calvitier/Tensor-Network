@@ -155,11 +155,11 @@ class mps:
         
         tensor = self.get_tensor(nt, False)
         if nt == 0:
-            u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
 
         else:
             tensor = tensor.reshape(self.virtdim[nt-1]*self.physdim[nt], self.virtdim[nt])
-            u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
             u = u.reshape(self.virtdim[nt-1], self.physdim[nt], -1)
         self.tensors[nt] = u
         if normalize:
@@ -192,12 +192,12 @@ class mps:
         tensor = self.get_tensor(nt, False)
         if nt == self.length-1:
             tensor = tensor.T
-            u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
             u = u.T
 
         else:
             tensor = tensor.reshape(self.virtdim[nt-1], self.physdim[nt]*self.virtdim[nt]).T
-            u, lm, r = self.svd_or_qr(way, tensor, if_trun, cut_dim)
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
             u = u.T.reshape(-1, self.physdim[nt], self.virtdim[nt])
         self.tensors[nt] = u
         if normalize:
@@ -208,7 +208,7 @@ class mps:
         self.virtdim[nt-1] = r.shape[0]
         return lm
 
-    def svd_or_qr(self, way, tensor, if_trun, cut_dim):
+    def __svd_or_qr(self, way, tensor, if_trun, cut_dim):
         if way.lower() == 'svd':
             u, lm, v = np.linalg.svd(tensor, full_matrices = False)
             if if_trun:
@@ -221,6 +221,69 @@ class mps:
             lm = None
         return u, lm, r
 
+    def evolve_gate(self, gate, nt, cut_dim = -1, center = None, debug = False):
+        """
+        在nt, nt+1上做gate操作
+         0    1
+         |    |
+          gate
+         |    |
+         2    3
+        :param gate: the two-body gate to evolve the MPS
+        :param nt: the position of the first spin in the gate
+        :param center: where to put the new center; nt(None) or nt+1
+        
+        """
+        if self.center < nt:
+            self.center_orth(nt, 'qr', cut_dim, True)
+        else:
+            self.center_orth(nt + 1, 'qr', cut_dim, True)
+        tensor1 = self.get_tensor(nt)
+        tensor2 = self.get_tensor(nt+1)
+        tensor = np.einsum('iba,acj,klbc->iklj', tensor1, tensor2, gate)
+        s = tensor.shape
+        u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]*s[3]), full_matrices=False)
+        if debug:
+            print(s)
+            print(u.shape, lm.size, v.shape)
+        if 0 < cut_dim < lm.size:
+            if center == nt or center == None:
+                u = u[:, :cut_dim].dot(np.diag(lm[:cut_dim])).reshape(s[0], s[1], cut_dim)
+                v = v[:cut_dim, :].reshape(cut_dim, s[2], s[3])
+                self.center = nt
+            else:
+                u = u[:, :cut_dim].reshape(s[0], s[1], cut_dim)
+                v = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :]).reshape(cut_dim, s[2], s[3])
+                self.center = nt+1
+            self.virtdim[nt] = cut_dim
+        else:
+            if center == nt or center == None:
+                u = (lm*u).reshape(s[0], s[1], lm.size)
+                v = v.reshape(lm.size, s[2], s[3])
+                self.center = nt
+            else:
+                u = u.reshape(s[0], s[1], lm.size)
+                v = np.diag(lm).dot(v).reshape(lm.size, s[2], s[3])
+                self.center = nt+1
+            self.virtdim[nt] = lm.size
+        self.tensors[nt] = u
+        self.tensors[nt+1] = v
+        
 
+
+class canonical_form:
+    """
+    canonical form of mps
+    only can be created from an mps
+    """
+
+    def __init__(self, mps, cut_dim = -1, normalize = False):
+        """
+        :param mps: MPS态
+        :param cut_dim: 裁剪维数，-1表示不裁剪，如果裁剪则使用SVD
+        :param normalize: 归一化，默认不归一
+
+        """
+        self.tensors = mps.tensors
     
 

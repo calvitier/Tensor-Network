@@ -5,7 +5,17 @@ import matplotlib.pyplot as plt
 import cv2
 import MPS
 
-x = MPS.mps.init_rand(d = 4, chi = 10, length = 4)
-print(x.virtdim)
-for n in range(0,x.length):
-    print(x.tensors[n].shape,end=' ')
+d = 2
+chi = 10
+length = 10
+m = MPS.mps.init_rand(d, chi, length)
+m.center_orth(0, normalize=True)
+m0 = m.mps2tensor()
+m0 = m0/np.linalg.norm(m0)
+gate = np.eye(d ** 2).reshape([d, d, d, d])
+m.evolve_gate(gate, 5)
+m1 = m.mps2tensor()
+m1 = m1/np.linalg.norm(m1)
+err = np.linalg.norm(m1 - m0)
+print(err)
+
