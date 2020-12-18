@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 import torch as tc
-import matplotlib.pyplot as plt
+from scipy.linalg import expm
 
 
 class mps:
@@ -230,7 +230,7 @@ class mps:
          |    |
          2    3
         :param gate: the two-body gate to evolve the MPS
-        :param nt: the position of the first spin in the gate
+        :param nt: the position of the first spin in the gate, nt <= length - 2
         :param center: where to put the new center; nt(None) or nt+1
         
         """
@@ -240,34 +240,148 @@ class mps:
             self.center_orth(nt + 1, 'qr', cut_dim, True)
         tensor1 = self.get_tensor(nt)
         tensor2 = self.get_tensor(nt+1)
-        tensor = np.einsum('iba,acj,klbc->iklj', tensor1, tensor2, gate)
-        s = tensor.shape
-        u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]*s[3]), full_matrices=False)
-        if debug:
-            print(s)
-            print(u.shape, lm.size, v.shape)
-        if 0 < cut_dim < lm.size:
-            if center == nt or center == None:
-                u = u[:, :cut_dim].dot(np.diag(lm[:cut_dim])).reshape(s[0], s[1], cut_dim)
-                v = v[:cut_dim, :].reshape(cut_dim, s[2], s[3])
-                self.center = nt
+
+        if nt == 0:
+            tensor = np.einsum('ba,acj,klbc->klj', tensor1, tensor2, gate)
+            s = tensor.shape
+            u, lm, v = np.linalg.svd(tensor.reshape(s[0], s[1]*s[2]), full_matrices=False)
+            if debug:
+                print(s)
+                print(u.shape, lm.size, v.shape)
+            if 0 < cut_dim < lm.size:
+                if center == nt or center == None:
+                    u = u[:, :cut_dim].dot(np.diag(lm[:cut_dim]))
+                    v = v[:cut_dim, :].reshape(cut_dim, s[1], s[2])
+                    self.center = nt
+                else:
+                    u = u[:, :cut_dim]
+                    v = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :]).reshape(cut_dim, s[1], s[2])
+                    self.center = nt+1
+                self.virtdim[nt] = cut_dim
             else:
-                u = u[:, :cut_dim].reshape(s[0], s[1], cut_dim)
-                v = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :]).reshape(cut_dim, s[2], s[3])
-                self.center = nt+1
-            self.virtdim[nt] = cut_dim
+                if center == nt or center == None:
+                    u = lm * u
+                    v = v.reshape(lm.size, s[1], s[2])
+                    self.center = nt
+                else:
+                    v = np.diag(lm).dot(v).reshape(lm.size, s[1], s[2])
+                    self.center = nt+1
+                self.virtdim[nt] = lm.size
+        
+        elif nt == self.length - 2:
+            tensor = np.einsum('iba,ac,klbc->ikl', tensor1, tensor2, gate)
+            s = tensor.shape
+            u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]), full_matrices=False)
+            if debug:
+                print(s)
+                print(u.shape, lm.size, v.shape)
+            if 0 < cut_dim < lm.size:
+                if center == nt or center == None:
+                    u = u[:, :cut_dim].dot(np.diag(lm[:cut_dim])).reshape(s[0], s[1], cut_dim)
+                    v = v[:cut_dim, :]
+                    self.center = nt
+                else:
+                    u = u[:, :cut_dim].reshape(s[0], s[1], cut_dim)
+                    v = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :])
+                    self.center = nt+1
+                self.virtdim[nt] = cut_dim
+            else:
+                if center == nt or center == None:
+                    u = (lm*u).reshape(s[0], s[1], lm.size)
+                    v = v
+                    self.center = nt
+                else:
+                    u = u.reshape(s[0], s[1], lm.size)
+                    v = np.diag(lm).dot(v)
+                    self.center = nt+1
+                self.virtdim[nt] = lm.size
+
         else:
-            if center == nt or center == None:
-                u = (lm*u).reshape(s[0], s[1], lm.size)
-                v = v.reshape(lm.size, s[2], s[3])
-                self.center = nt
+            tensor = np.einsum('iba,acj,klbc->iklj', tensor1, tensor2, gate)
+            s = tensor.shape
+            u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]*s[3]), full_matrices=False)
+            if debug:
+                print(s)
+                print(u.shape, lm.size, v.shape)
+            if 0 < cut_dim < lm.size:
+                if center == nt or center == None:
+                    u = u[:, :cut_dim].dot(np.diag(lm[:cut_dim])).reshape(s[0], s[1], cut_dim)
+                    v = v[:cut_dim, :].reshape(cut_dim, s[2], s[3])
+                    self.center = nt
+                else:
+                    u = u[:, :cut_dim].reshape(s[0], s[1], cut_dim)
+                    v = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :]).reshape(cut_dim, s[2], s[3])
+                    self.center = nt+1
+                self.virtdim[nt] = cut_dim
             else:
-                u = u.reshape(s[0], s[1], lm.size)
-                v = np.diag(lm).dot(v).reshape(lm.size, s[2], s[3])
-                self.center = nt+1
-            self.virtdim[nt] = lm.size
+                if center == nt or center == None:
+                    u = (lm*u).reshape(s[0], s[1], lm.size)
+                    v = v.reshape(lm.size, s[2], s[3])
+                    self.center = nt
+                else:
+                    u = u.reshape(s[0], s[1], lm.size)
+                    v = np.diag(lm).dot(v).reshape(lm.size, s[2], s[3])
+                    self.center = nt+1
+                self.virtdim[nt] = lm.size
+
         self.tensors[nt] = u
         self.tensors[nt+1] = v
+
+    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, tol = None, times = 1):
+        """
+        :param hamiltonion: 时间演化二体哈密顿量，现仅支持全部哈密顿量相同的模拟
+        :param tau: 模拟步长
+        :param cut_dim: 裁剪维数，如果设置tol则为初始裁剪维数
+        :param tol: 单步演化允许误差，自适应调节裁剪维数        #还没写#
+        :param times: 模拟次数
+
+        """
+        evolve_op = expm(-1j * tau * hamiltonion) # e^(-iHt)
+        for _ in range(0, times):
+            for n in range(0, self.length - 1):
+                self.evolve_gate(evolve_op, n, cut_dim, center = n+1)
+
+    def __sub__(self, rhs):
+        assert self.length == rhs.length
+        tensors = list()
+        for n in range(0, self.length):
+            assert self.tensors[n].shape == rhs.tensors[n].shape
+            tensors += [self.tensors[n] - rhs.tensors[n]]
+        return mps.init_tensors(tensors)
+
+    def norm(self):
+        sum = 0
+        for n in range(0, self.length):
+            sum += np.linalg.norm(self.tensors[n])
+        return sum
+
+    
+
+def ground_state(length, hamiltonion, tau = 1e-4, tol = 1e-6, times = 1e3):
+    d = hamiltonion.shape[0]
+    d_ = hamiltonion.shape[1]
+    assert d == d_
+
+    i_hamiltonion = -1j * hamiltonion
+
+    m0 = mps.init_rand(d, d**2, length)
+    m0.TEBD(i_hamiltonion, tau, d**2, tol)
+    m1 = mps.init_tensors(m0.tensors)
+    m1.TEBD(i_hamiltonion, tau, d**2, tol)
+    err = (m1 - m0).norm/m0.norm
+    n = 0
+    while err > tol and n < times:
+        m0 = mps.init_tensors(m1.tensors)
+        m1.TEBD(i_hamiltonion, tau, d**2, tol)
+        err = (m1 - m0).norm/m0.norm
+        n += 1
+    else:
+        if n == times:
+            print('time out!')
+    return m1
+    
+
+
         
 
 
