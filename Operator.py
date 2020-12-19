@@ -17,9 +17,10 @@ def spin_operator_one_half():
 
 def heisenberg_hamilt(j, h):
     """
+    海森堡自旋哈密顿量
     :param j: list，耦合参数[Jx, Jy, Jz]
     :param h: list，外磁场[hx, hy, hz]
-    :return H: 哈密顿量
+    :return H: 哈密顿量，矩阵形式
     """
     op = spin_operator_one_half()
     H = j[0]*np.kron(op['x'], op['x']) + j[1]*np.kron(op['y'], op['y']) + \
@@ -30,3 +31,4 @@ def heisenberg_hamilt(j, h):
     if np.linalg.norm(np.imag(H)) < 1e-20:
         H = np.real(H)
     return H
+    

@@ -1,5 +1,5 @@
-import numpy as np
 import copy
+import numpy as np
 import torch as tc
 from scipy.linalg import expm
 
@@ -34,8 +34,7 @@ class mps:
 
     def __init__(self, tensors):
         """
-        :param length: 张量个数
-        :param center: 正交中心 为负数时，MPS非中心正交
+        建议使用init_rand, init_tensors生成
         """
         self.length = len(tensors)
         self.tensors = copy.deepcopy(tensors)
@@ -54,10 +53,10 @@ class mps:
         随机初始化
 
         """
-        tensors = [np.random.randn(d, chi)]
+        tensors = [np.random.rand(d, chi)]
         for _ in range(1,length-1):
-            tensors += [np.random.randn(chi, d, chi)]
-        tensors += [np.random.randn(chi, d)]
+            tensors += [np.random.rand(chi, d, chi)]
+        tensors += [np.random.rand(chi, d)]
         return cls(tensors)
 
     @classmethod
@@ -329,17 +328,33 @@ class mps:
 
     def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, tol = None, times = 1):
         """
-        :param hamiltonion: 时间演化二体哈密顿量，现仅支持全部哈密顿量相同的模拟
+        :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
         :param tau: 模拟步长
         :param cut_dim: 裁剪维数，如果设置tol则为初始裁剪维数
         :param tol: 单步演化允许误差，自适应调节裁剪维数        #还没写#
         :param times: 模拟次数
 
         """
-        evolve_op = expm(-1j * tau * hamiltonion) # e^(-iHt)
-        for _ in range(0, times):
+        if type(cut_dim) != list:
+            cut_dim = cut_dim * np.ones(self.length-1)
+        if type(hamiltonion) == list:
             for n in range(0, self.length - 1):
-                self.evolve_gate(evolve_op, n, cut_dim, center = n+1)
+                hamiltonion[n] = expm(-1j * tau * hamiltonion[n]) # e^(-iHt)
+                if np.linalg.norm(np.imag(hamiltonion[n])) < 1e-15:
+                    hamiltonion[n] = np.real(hamiltonion[n])
+                hamiltonion[n] = hamiltonion[n].reshape(self.physdim[n], self.physdim[n+1], self.physdim[n], self.physdim[n+1])
+            for _ in range(0, times):
+                for n in range(0, self.length - 1):
+                    self.evolve_gate(hamiltonion[n], n, cut_dim[n], center = n+1)
+        else:
+            hamiltonion = expm(-1j * tau * hamiltonion) # e^(-iHt)
+            if np.linalg.norm(np.imag(hamiltonion)) < 1e-15:
+                hamiltonion = np.real(hamiltonion)
+            hamiltonion = hamiltonion.reshape(self.physdim[0], self.physdim[1], self.physdim[0], self.physdim[1])
+            for _ in range(0, times):
+                for n in range(0, self.length - 1):
+                    self.evolve_gate(hamiltonion, n, cut_dim[n], center = n+1)
+
 
     def __sub__(self, rhs):
         assert self.length == rhs.length
@@ -350,30 +365,70 @@ class mps:
         return mps.init_tensors(tensors)
 
     def norm(self):
-        sum = 0
+        sum = 0.0
         for n in range(0, self.length):
             sum += np.linalg.norm(self.tensors[n])
         return sum
 
+    def inner(self, rhs):
+        """
+        <self|rhs>做内积
+        :param self: 左矢
+        :param rhs: 右矢
+        :return tensor: 内积结果
+        """
+        assert self.length == rhs.length
+        assert self.physdim == rhs.physdim
+
+        tensor = np.tensordot(self.tensors[0].conj(), rhs.tensors[0], [[0], [0]])
+        for n in range(1, self.length-1):
+            tensor = np.einsum('ij, ik, jl->kl', tensor, self.tensors[n].conj(), rhs.tensors[n])
+        tensor = np.einsum('ij, ik, jk->', tensor, self.tensors[-1].conj(), rhs.tensors[-1])
+        return tensor
+
+
     
 
-def ground_state(length, hamiltonion, tau = 1e-4, tol = 1e-6, times = 1e3):
-    d = hamiltonion.shape[0]
-    d_ = hamiltonion.shape[1]
-    assert d == d_
+def ground_state(length, hamiltonion, physdim = None, tau = 1e-4, tol = 1e-6, times = 1e3):
+    """
+    求哈密顿量list对应的基态，返回MPS
+    :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
+    :param physdim: 如果hamiltonion为list，必须输入物理指标维度list
+    :param tau: 模拟步长
+    :param tol: 结果允许误差
+    :param times: 模拟次数
+    :return m1: 基态对应的MPS态
 
-    i_hamiltonion = -1j * hamiltonion
+    """
+    if type(hamiltonion) == list:
+        for n in range(0, length - 1):
+            hamiltonion[n] = -1j * hamiltonion[n]
+        tensors = list()
+        cut_dim = list()
+        tensors += [np.random.rand(physdim[0], physdim[0]*physdim[1])]
+        cut_dim += [physdim[0]*physdim[1]]
+        for n in range(1, length - 1):
+            tensors += [np.random.rand(physdim[n-1]*physdim[n], physdim[n], physdim[n]*physdim[n+1])]
+            cut_dim += physdim[n]*physdim[n+1]
+        tensors += [np.random.rand(physdim[-1]*physdim[-2], physdim[-1])]
 
-    m0 = mps.init_rand(d, d**2, length)
-    m0.TEBD(i_hamiltonion, tau, d**2, tol)
+        m0 = mps.init_tensors(tensors)
+
+    else:
+        hamiltonion = -1j * hamiltonion
+        cut_dim = hamiltonion.shape[0]
+        d = np.sqrt(cut_dim).astype(int)
+        m0 = mps.init_rand(d, cut_dim, length)
+
+    m0.TEBD(hamiltonion, tau, cut_dim, tol)
     m1 = mps.init_tensors(m0.tensors)
-    m1.TEBD(i_hamiltonion, tau, d**2, tol)
-    err = (m1 - m0).norm/m0.norm
+    m1.TEBD(hamiltonion, tau, cut_dim, tol)
+    err = (m1 - m0).norm()/m0.norm()
     n = 0
     while err > tol and n < times:
         m0 = mps.init_tensors(m1.tensors)
-        m1.TEBD(i_hamiltonion, tau, d**2, tol)
-        err = (m1 - m0).norm/m0.norm
+        m1.TEBD(hamiltonion, tau, d**2, tol)
+        err = (m1 - m0).norm()/m0.norm()
         n += 1
     else:
         if n == times:
@@ -399,5 +454,7 @@ class canonical_form:
 
         """
         self.tensors = mps.tensors
+
+
     
 
