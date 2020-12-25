@@ -1,8 +1,5 @@
 import numpy as np
-import copy
-import MPS
-import Operator as op
-from scipy.linalg import expm
+import PEPS
 
 """
 d = 2
@@ -21,6 +18,22 @@ print(np.linalg.norm(err))
 
 """
 
+"""
 H = op.heisenberg_hamilt([1, 1, 1], [0, 0, 0])
 gs = MPS.ground_state(3, H, times=1e5)
 print('success!')
+"""
+physdim = 2
+virtdim = 5
+n = 4
+m = 4
+shape = (n, m)
+p = PEPS.peps.init_rand(physdim, virtdim, shape)
+print(p.physdim)
+print(p.virtdim_horizontal)
+print(p.virtdim_vertical)
+for i in range(0, n):
+    for j in range(0, m):
+        print(p.tensors[i][j].shape, end=' ')
+    print('\n')
+    
