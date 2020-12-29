@@ -23,6 +23,8 @@ H = op.heisenberg_hamilt([1, 1, 1], [0, 0, 0])
 gs = MPS.ground_state(3, H, times=1e5)
 print('success!')
 """
+
+"""
 physdim = 2
 virtdim = 5
 n = 4
@@ -36,4 +38,14 @@ for i in range(0, n):
     for j in range(0, m):
         print(p.tensors[i][j].shape, end=' ')
     print('\n')
-    
+"""
+
+x = np.random.rand(5, 5, 5)
+x = x.reshape(5, 25)
+u, lm, v = PEPS.svd_cut(x)
+print(lm)
+x = v.reshape(-1, 5, 5)
+x = np.rollaxis(x, 1, 0)
+x = x.reshape(5, -1)
+u, lm, v = PEPS.svd_cut(x)
+print(lm)
