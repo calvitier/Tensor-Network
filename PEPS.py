@@ -73,8 +73,8 @@ class peps:
         self.shape = (self.n, self.m)
         self.tensors = copy.deepcopy(tensors)
         self.is_GL = 0
-        self.Lambda_hori = None
-        self.Lambda_vert = None
+        self.Lambda_hori = list()
+        self.Lambda_vert = list()
         self.pd = np.zeros(self.shape)
         self.vd_hori = np.zeros((self.n, self.m - 1), dtype=int)
         self.vd_vert = np.zeros((self.n - 1, self.m), dtype=int)
@@ -153,7 +153,8 @@ class peps:
 
     def to_Gamma_Lambda(self, cut_dim = -1):
         if not self.is_GL:
-            self.is_GL = 1
+            
+            # horizontal
             # i = 0
             matrix = self.tensors[0][0].reshape(self.vd_hori[0, 0], self.vd_vert[0, 0] * self.pd[0, 0])
             u, lm, v = svd_cut(matrix, cut_dim)
@@ -163,15 +164,54 @@ class peps:
             self.tensors[0][0] = v.reshape(self.vd_hori[0, 0], self.vd_vert[0, 0], self.pd[0, 0])
             for j in range(1, self.m - 1):
                 matrix = np.rollaxis(self.tensors[0][j], 1, 0)
-                matrix = matrix.reshape(self.vd_hori[0, j], self.vd_hori[0, j] * self.vd_vert[0, j] * self.pd[0, j])
+                matrix = matrix.reshape(self.vd_hori[0, j], self.vd_hori[0, j-1] * self.vd_vert[0, j] * self.pd[0, j])
                 u, lm, v = svd_cut(matrix, cut_dim)
                 self.vd_hori[0, j] = lm.size
                 self.tensors[0][j+1] = np.tensordot(u, self.tensors[0][j+1], [[0], [0]])
                 Lambda += [lm]
-                self.tensors[0][j] = v.reshape(self.vd_hori[0, j], self.vd_hori[0, j], self.vd_vert[0, j], self.pd[0, j])
+                self.tensors[0][j] = v.reshape(self.vd_hori[0, j], self.vd_hori[0, j-1], self.vd_vert[0, j], self.pd[0, j])
                 self.tensors[0][j] = np.rollaxis(self.tensors[0][j], 0, 1)
-            self.Lambda_hori = [Lambda]
+            self.Lambda_hori += [Lambda]
+
+            # i = 1 ~ n-2
+            for i in range(1, self.n - 1):
+                matrix = np.rollaxis(self.tensors[i][0], 1, 0)
+                matrix = matrix.reshape(self.vd_hori[i, 0], self.vd_vert[i-1, 0] * self.vd_vert[i, 0] * self.pd[i, 0])
+                u, lm, v = svd_cut(matrix, cut_dim)
+                self.vd_hori[i][0] = lm.size
+                self.tensors[i][1] = np.tensordot(u, self.tensors[i][1], [[0], [0]])
+                Lambda = [lm]
+                self.tensors[i][0] = v.reshape(self.vd_hori[i, 0], self.vd_vert[i-1, 0], self.vd_vert[i, 0], self.pd[i, 0])
+                for j in range(1, self.m - 1):
+                    matrix = np.rollaxis(self.tensors[0][j], 2, 0)
+                    matrix = matrix.reshape(self.vd_hori[i, j], self.vd_hori[i-1, j] * self.vd_vert[i-1, j] * self.vd_vert[i, j] * self.pd[i, j])
+                    u, lm, v = svd_cut(matrix, cut_dim)
+                    self.vd_hori[i][j] = lm.size
+                    self.tensors[i][j+1] = np.tensordot(u, self.tensors[i][1], [[0], [0]])
+                    Lambda += [lm]
+                    self.tensors[i][j] = v.reshape(self.vd_hori[i, j], self.vd_hori[i-1, j], self.vd_vert[i-1, j], self.vd_vert[i, j], self.pd[i, j])
+                    self.tensors[i][j] = np.rollaxis(self.tensors[0][j], 0, 2)
+                self.Lambda_hori += [Lambda]
             
+            # i = n-1
+            matrix = self.tensors[-1][0].reshape(self.vd_hori[-1, 0], self.vd_vert[-1, 0] * self.pd[-1, 0])
+            u, lm, v = svd_cut(matrix, cut_dim)
+            self.vd_hori[-1, 0] = lm.size
+            self.tensors[-1][1] = np.tensordot(u, self.tensors[-1][1], [[0], [0]])
+            Lambda = [lm]
+            self.tensors[-1][0] = v.reshape(self.vd_hori[-1, 0], self.vd_vert[-1, 0], self.pd[-1, 0])
+            for j in range(1, self.m - 1):
+                matrix = np.rollaxis(self.tensors[-1][j], 1, 0)
+                matrix = matrix.reshape(self.vd_hori[-1, j], self.vd_hori[-1, j-1] * self.vd_vert[-1, j] * self.pd[-1, j])
+                u, lm, v = svd_cut(matrix, cut_dim)
+                self.vd_hori[-1, j] = lm.size
+                self.tensors[-1][j+1] = np.tensordot(u, self.tensors[-1][j+1], [[0], [0]])
+                Lambda += [lm]
+                self.tensors[-1][j] = v.reshape(self.vd_hori[-1, j], self.vd_hori[-1, j-1], self.vd_vert[-1, j], self.pd[-1, j])
+                self.tensors[-1][j] = np.rollaxis(self.tensors[-1][j], 0, 1)
+            self.Lambda_hori += [Lambda]
+            
+            # vertical
             # i = 1 ~ n-2
             for i in range(1, self.n - 1):
                 matrix = self.tensors[i][0].reshape(self.vd_vert[i-1, 0], self.vd_hori[i, 0] * self.vd_vert[i, 0] * self.pd[i, 0])
@@ -185,13 +225,55 @@ class peps:
                     matrix = np.rollaxis(self.tensors[0][j], 1, 0)
                     matrix = matrix.reshape(self.vd_vert[i-1][j], self.vd_hori[i, j-1] * self.vd_hori[i, j] * self.vd_vert[i, j] * self.pd[i, j])
                     u, lm, v = svd_cut(matrix, cut_dim)
-                    self.tensors[0][j+1] = np.tensordot(u, self.tensors[0][j+1], [[0], [0]])
+                    self.vd_vert[i-1][j] = lm.size
+                    self.tensors[i-1][j] = np.tensordot(u, self.tensors[i-1][j], [[0], [-2]])
+                    self.tensors[i-1][j] = np.rollaxis(self.tensors[i-1][j], 0, -2)
                     Lambda += [lm]
-                    self.tensors[0][j] = v.reshape(-1, self.vd_hori[0, j], self.vd_vert[0, 0], self.pd[0, 0])
-                    self.tensors[0][j] = np.rollaxis(self.tensors[0][j], 0, 1)
+                    self.tensors[i][j] = v.reshape(self.vd_vert[i-1][j], self.vd_hori[i, j-1], self.vd_hori[i, j], self.vd_vert[i, j], self.pd[i, j])
+                    self.tensors[i][j] = np.rollaxis(self.tensors[0][j], 0, 1)
+                matrix = self.tensors[i][-1].reshape(self.vd_vert[i-1, -1], self.vd_hori[i, -1] * self.vd_vert[i, -1] * self.pd[i, -1])
+                u, lm, v = svd_cut(matrix, cut_dim)
+                self.vd_vert[i-1][-1] = lm.size
+                self.tensors[i-1][-1] = np.tensordot(u, self.tensors[i-1][-1], [[0], [-2]])
+                self.tensors[i-1][-1] = np.rollaxis(self.tensors[i-1][-1], 0, -2)
+                Lambda = [lm]
+                self.tensors[i][-1] = v.reshape(self.vd_vert[i-1][-1], self.vd_hori[i, -1], self.vd_vert[i, -1], self.pd[i, -1])
+                self.Lambda_vert += [Lambda]
+            
+            # i = n-1
+            matrix = np.rollaxis(self.tensors[-1][0], 1, 0)
+            matrix = matrix.reshape(self.vd_hori[-1, 0], self.vd_vert[-1, 0] * self.pd[-1, 0])
+            u, lm, v = svd_cut(matrix, cut_dim)
+            self.vd_vert[-1][0] = lm.size
+            self.tensors[-2][0] = np.tensordot(u, self.tensors[-2][0], [[0], [-2]])
+            self.tensors[-2][0] = np.rollaxis(self.tensors[-2][0], 0, -2)
+            Lambda = [lm]
+            self.tensors[-1][0] = v.reshape(self.vd_hori[-1, 0], self.vd_vert[-1, 0], self.pd[-1, 0])
+            self.tensors[-1][0] = np.rollaxis(self.tensors[-1][0], 0, 1)
+            for j in range(1, self.m - 1):
+                matrix = np.rollaxis(self.tensors[-1][j], 2, 0)
+                matrix = matrix.reshape(self.vd_vert[-1][j], self.vd_hori[-1, j-1] * self.vd_hori[-1, j] * self.pd[-1, j])
+                u, lm, v = svd_cut(matrix, cut_dim)
+                self.vd_vert[-1][j] = lm.size
+                self.tensors[-2][j] = np.tensordot(u, self.tensors[-2][j], [[0], [-2]])
+                self.tensors[-2][j] = np.rollaxis(self.tensors[-2][j], 0, -2)
+                Lambda += [lm]
+                self.tensors[i][j] = v.reshape(self.vd_vert[-1][j], self.vd_hori[-1, j-1], self.vd_hori[-1, j], self.pd[-1, j])
+                self.tensors[i][j] = np.rollaxis(self.tensors[0][j], 0, 2)
+            matrix = np.rollaxis(self.tensors[-1][-1], 1, 0)
+            matrix = matrix.reshape(self.vd_hori[-1, -1], self.vd_vert[-1, -1] * self.pd[-1, -1])
+            u, lm, v = svd_cut(matrix, cut_dim)
+            self.vd_vert[-1][-1] = lm.size
+            self.tensors[-2][-1] = np.tensordot(u, self.tensors[-2][-1], [[0], [-2]])
+            self.tensors[-2][-1] = np.rollaxis(self.tensors[-2][-1], 0, -2)
+            Lambda = [lm]
+            self.tensors[-1][-1] = v.reshape(self.vd_hori[-1, -1], self.vd_vert[-1, -1], self.pd[-1, -1])
+            self.tensors[-1][-1] = np.rollaxis(self.tensors[-1][-1], 0, 1)
+            self.Lambda_vert += [Lambda]
+
+            self.is_GL = 1
                 
                 
-                self.Lambda_hori += [Lambda]
 
 
             
