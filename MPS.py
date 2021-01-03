@@ -446,7 +446,80 @@ def ground_state(length, hamiltonion, physdim = None, tau = 1e-4, tol = 1e-6, ti
     
 
 
+class mpo:
+    """
+    MPO算符类，目前仅用于PEPS中的运算，无法作用于MPS
+
+    ！！！重要变量！！！
+    - length: MPS长度
+    - tensors: 为list，储存MPO中每个小张量
+    - center: 正交中心，-1表示不为中心正交形式
+    - pd: 物理指标矩阵
+    - vd: 虚拟指标矩阵
+
+    注：
+        垂直方向为物理指标，水平方向为虚拟指标
+        1. 中间每个张量为四阶
+               1
+               |
+         0  —  A  —  3
+               |
+               2
         
+        2. 第0个张量为二阶
+         0
+         |
+         A  —  2
+         |
+         1
+        
+        3. 第-1个张量为二阶
+               1
+               |
+         0  —  A
+               |
+               2
+    """
+    def __init__(self, tensors):
+        """
+        建议使用init_rand, init_tensors生成
+        """
+        self.length = len(tensors)
+        self.tensors = copy.deepcopy(tensors)
+        self.center = -1
+
+        self.pd = np.zeros((2, self.length))
+        self.vd = np.zeros(self.length - 1)
+        self.pd[0][0] = tensors[0].shape[0]
+        self.pd[1][0] = tensors[0].shape[1]
+        self.vd[0] = tensors[0].shape[-1]
+        for n in range(1, self.length - 1):
+            self.pd[0][n] = tensors[n].shape[1]
+            self.pd[1][n] = tensors[n].shape[2]
+            self.vd[n] = tensors[n].shape[-1]
+        self.pd[0][-1] = tensors[-1].shape[1]
+        self.pd[1][-1] = tensors[-1].shape[2]
+
+        
+    @classmethod
+    def init_rand(cls, d, chi, length):
+        """
+        随机初始化
+
+        """
+        tensors = [np.random.rand(d, d, chi)]
+        for _ in range(1,length-1):
+            tensors += [np.random.rand(chi, d, d, chi)]
+        tensors += [np.random.rand(chi, d, d)]
+        return cls(tensors)
+
+    @classmethod
+    def init_tensors(cls, tensors):  
+        for n in range(0, len(tensors)-1):
+            assert tensors[n].shape[-1] == tensors[n+1].shape[0]
+        return cls(tensors)
+    
+
 
 
 class canonical_form:

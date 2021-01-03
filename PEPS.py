@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import torch as tc
 from scipy.linalg import expm
+import MPS
 
 class peps:
 
@@ -14,15 +15,13 @@ class peps:
     - pd: 物理指标矩阵，大小为shape
     - vd_hori: 水平虚拟指标维数矩阵，n * m-1
     - vd_vert: 竖直虚拟指标维数矩阵，n-1 * m
-    - is_GL: 1表示为Gamma-Lambda形式，0表示不为
-    - Lambda_hori：二维list，储存Gamma-Lambda形式时的Lambda对角阵，is_GL = 0时为空，n * m-1
-    - Lambda_vert：二维list，储存Gamma-Lambda形式时的Lambda对角阵，is_GL = 0时为空，n-1 * m
+    - is_GL: True表示为Gamma-Lambda形式，False表示不为
+    - Lambda_hori：二维list，储存Gamma-Lambda形式时的Lambda对角阵，is_GL = False时为空，n * m-1
+    - Lambda_vert：二维list，储存Gamma-Lambda形式时的Lambda对角阵，is_GL = False时为空，n-1 * m
 
     ！！！重要成员函数！！！
     - init_tensor：输入指定张量列表，需满足注中要求
     - init_rand: 随机初始化
-    - peps2tensor: 收缩所有虚拟指标，返回PEPS代表张量
-    - peps2vec: 收缩所有虚拟指标，将PEPS代表态矢量输出
     - inner: PEPS态间做内积
     - to_Gamma_Lambda：PEPS转化为Gamma-Lambda形式
     - to_PEPS：Gamma-Lambda形式转化为PEPS
@@ -72,7 +71,7 @@ class peps:
         self.m = len(tensors[0])
         self.shape = (self.n, self.m)
         self.tensors = copy.deepcopy(tensors)
-        self.is_GL = 0
+        self.is_GL = False
         self.Lambda_hori = list()
         self.Lambda_vert = list()
         self.pd = np.zeros(self.shape)
@@ -151,7 +150,72 @@ class peps:
         """
         return cls(tensors)
 
+
+    def inner(self, rhs, cut_dim = None, debug = False):
+        """
+        <self|rhs>做内积
+        目前仅支持一般形式，GL形式会转化为一般形式做内积
+        按行收缩，头尾两侧分别进行
+        中间结果为一MPO，使用MPS存储，指标顺序为self, rhs, virtual(= self*rhs)
+        :param self: 左矢
+        :param rhs: 右矢
+        :param cut_dim: 收缩过程裁剪维数，默认为最大虚拟指标的平方
+        :return tensor: 内积结果
+
+        """
+        assert self.shape == rhs.shape
+        assert (self.pd == rhs.pd).all()
+
+        if self.is_GL:
+            self.to_PEPS()
+        if rhs.is_GL:
+            rhs.to_PEPS()
+        """
+        x = copy.deepcopy(self.tensors)
+        y = copy.deepcopy(rhs.tensors)
+        """
+        
+        if cut_dim == None:
+            cut_dim = max(self.vd_max(), rhs.vd_max()) ** 2
+
+        mpo = list()
+        tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
+        tensor = tensor.reshape(self.vd_vert[0][0], rhs.vd_vert[0][0], self.vd_hori[0][0] * rhs.vd_hori[0][0])
+        mpo += [tensor]
+        for j in range(1, self.m -1):
+            tensor = np.einsum('ijkp, lmnp ->ilknjm', self.tensors[0][j].conj(), rhs.tensors[0][j])
+            tensor = tensor.reshape(self.vd_hori[0][j-1] * rhs.vd_hori[0][j-1], self.vd_vert[0][j], rhs.vd_vert[0][j], self.vd_hori[0][j] * rhs.vd_hori[0][j])
+            mpo += [tensor]
+        tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
+        tensor = tensor.reshape(self.vd_hori[0][-1] * rhs.vd_hori[0][-1], self.vd_vert[0][0], rhs.vd_vert[0][0])
+        mpo += [tensor]
+        mpo = MPS.mpo.init_tensors(mpo)
+        if debug:
+            print('success!')
+
+
+
+
+
+
+    def vd_max(self):
+        """
+        返回虚拟指标最大维数
+        """
+        return max(self.vd_hori.max(), self.vd_vert.max())
+
+
+    def to_PEPS(self):
+        """
+        转化为一般形式
+
+        """
+
     def to_Gamma_Lambda(self, cut_dim = -1):
+        """
+        转化为GL形式
+
+        """
         if not self.is_GL:
             
             # horizontal
@@ -271,7 +335,7 @@ class peps:
             self.tensors[-1][-1] = np.rollaxis(self.tensors[-1][-1], 0, 1)
             self.Lambda_vert += [Lambda]
 
-            self.is_GL = 1
+            self.is_GL = True
                 
                 
 

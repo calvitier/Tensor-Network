@@ -40,6 +40,7 @@ for i in range(0, n):
     print('\n')
 """
 
+"""
 x = np.random.rand(5, 5, 5)
 x = x.reshape(5, 25)
 u, lm, v = PEPS.svd_cut(x)
@@ -49,3 +50,7 @@ x = np.rollaxis(x, 1, 0)
 x = x.reshape(5, -1)
 u, lm, v = PEPS.svd_cut(x)
 print(lm)
+"""
+
+x = PEPS.peps.init_rand(2, 4, (3, 3))
+x.inner(x, debug=True)
