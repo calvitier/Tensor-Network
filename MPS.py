@@ -115,9 +115,10 @@ class mps:
             self.orth_n1_n2(self.length-1, center, way, cut_dim, normalize)
         elif self.center != center:
             self.orth_n1_n2(self.center, center, way, cut_dim, normalize)
+        self.center = center
         if normalize:
             self.normalize_center()
-        self.center = center
+        
 
     def normalize_center(self):
         if self.center > -1:
@@ -454,7 +455,7 @@ class mpo:
     - length: MPS长度
     - tensors: 为list，储存MPO中每个小张量
     - center: 正交中心，-1表示不为中心正交形式
-    - pd: 物理指标矩阵
+    - pd: 物理指标矩阵，[0,:]为上，[1,:]为下，[2,:]为前两者相乘
     - vd: 虚拟指标矩阵
 
     注：
@@ -488,8 +489,8 @@ class mpo:
         self.tensors = copy.deepcopy(tensors)
         self.center = -1
 
-        self.pd = np.zeros((2, self.length))
-        self.vd = np.zeros(self.length - 1)
+        self.pd = np.zeros((3, self.length), dtype=int)
+        self.vd = np.zeros(self.length - 1, dtype=int)
         self.pd[0][0] = tensors[0].shape[0]
         self.pd[1][0] = tensors[0].shape[1]
         self.vd[0] = tensors[0].shape[-1]
@@ -499,6 +500,9 @@ class mpo:
             self.vd[n] = tensors[n].shape[-1]
         self.pd[0][-1] = tensors[-1].shape[1]
         self.pd[1][-1] = tensors[-1].shape[2]
+
+        for n in range(0, self.length):
+            self.pd[2][n] = self.pd[0][n] * self.pd[1][n]
 
         
     @classmethod
@@ -518,6 +522,159 @@ class mpo:
         for n in range(0, len(tensors)-1):
             assert tensors[n].shape[-1] == tensors[n+1].shape[0]
         return cls(tensors)
+    
+    def get_tensor(self, nt, if_copy = True):
+        """
+        :param if_copy = True: get copy
+        :param if_copy = False: get self
+        
+        """
+        if if_copy:
+            return copy.deepcopy(self.tensors[nt])
+        else:
+            return self.tensors[nt]
+
+    def center_orth(self, center, way = 'svd', cut_dim = -1, normalize = False):
+        """
+        使center成为正交中心
+        :param way: 正交方法，默认SVD，可选QR
+        :param cut_dim: 裁剪维数，-1表示不裁剪，如果裁剪则使用SVD
+        :param normalize: 归一化，默认不归一
+
+        """
+        # 转化为MPS
+        self.tensors[0] = self.tensors[0].reshape(self.pd[2][0], self.vd[0])
+        for n in range(1, self.length - 1):
+            self.tensors[n] = self.tensors[n].reshape(self.vd[n-1], self.pd[2][n], self.vd[n])
+        self.tensors[-1] = self.tensors[-1].reshape(self.vd[n-1], self.pd[2][n])
+
+        # 复用MPS代码
+        if self.center < 0:
+            self.orth_n1_n2(0, center, way, cut_dim, normalize)
+            self.orth_n1_n2(self.length-1, center, way, cut_dim, normalize)
+        elif self.center != center:
+            self.orth_n1_n2(self.center, center, way, cut_dim, normalize)
+        self.center = center
+        if normalize:
+            self.normalize_center()
+
+        # 转化为MPO
+        self.tensors[0] = self.tensors[0].reshape(self.pd[0][0], self.pd[1][0], self.vd[0])
+        for n in range(1, self.length - 1):
+            self.tensors[n] = self.tensors[n].reshape(self.vd[n-1], self.pd[0][n], self.pd[1][n], self.vd[n])
+        self.tensors[-1] = self.tensors[-1].reshape(self.vd[n-1], self.pd[0][n], self.pd[1][n])
+        
+
+    def normalize_center(self):
+        if self.center > -1:
+            nt = self.center
+            norm = np.linalg.norm(self.tensors[nt])
+            self.tensors[nt] /= norm
+
+
+    def orth_n1_n2(self, n1, n2, way = 'svd', cut_dim = -1, normalize = False):
+        """
+        使n1->n2正交
+        :param way: 正交方法，默认SVD，可选QR
+        :param cut_dim: 裁剪维数，-1表示不裁剪，如果裁剪则使用SVD
+        :param normalize: 归一化，默认不归一
+
+        """
+        if n1 < n2:
+            for nt in range(n1, n2, 1):
+                self.orth_left2right(nt, way, cut_dim, normalize)
+        else:
+            for nt in range(n1, n2, -1):
+                self.orth_right2left(nt, way, cut_dim, normalize)
+
+
+    
+    def orth_left2right(self, nt, way = 'svd', cut_dim = -1, normalize = False):
+        """
+        使nt->nt+1从左向右正交
+        :param nt: 正交位置
+        :param way: 正交方法，默认SVD，可选QR
+        :param cut_dim: 裁剪维数，-1表示不裁剪，如果裁剪则使用SVD
+        :param normalize: 归一化，默认不归一
+
+        """
+
+        if 0 < cut_dim < self.vd[nt]:
+            # In this case, truncation is required
+            way = 'svd'
+            if_trun = True
+        else:
+            if_trun = False
+
+        assert way.lower() == 'svd' or way.lower() == 'qr'
+        
+        tensor = self.get_tensor(nt, False)
+        if nt == 0:
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
+
+        else:
+            tensor = tensor.reshape(self.vd[nt-1]*self.pd[2][nt], self.vd[nt])
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
+            u = u.reshape(self.vd[nt-1], self.pd[2][nt], -1)
+        self.tensors[nt] = u
+        if normalize:
+            r /= np.linalg.norm(r)
+        tensor_ = self.get_tensor(nt+1, False)
+        tensor_ = np.tensordot(r, tensor_, [[1], [0]])
+        self.tensors[nt+1] = tensor_
+        self.vd[nt] = r.shape[0]
+        return lm
+
+    def orth_right2left(self, nt, way = 'svd', cut_dim = -1, normalize = False):
+        """
+        使nt->nt-1从右向左正交
+        :param nt: 正交位置
+        :param way: 正交方法，默认SVD，可选QR
+        :param cut_dim: 裁剪维数，-1表示不裁剪，如果裁剪则使用SVD
+        :param normalize: 归一化，默认不归一
+
+        """
+
+        if 0 < cut_dim < self.vd[nt-1]:
+            # In this case, truncation is required
+            way = 'svd'
+            if_trun = True
+        else:
+            if_trun = False
+
+        assert way.lower() == 'svd' or way.lower() == 'qr'
+        
+        tensor = self.get_tensor(nt, False)
+        if nt == self.length-1:
+            tensor = tensor.T
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
+            u = u.T
+
+        else:
+            tensor = tensor.reshape(self.vd[nt-1], self.pd[2][nt]*self.vd[nt]).T
+            u, lm, r = self.__svd_or_qr(way, tensor, if_trun, cut_dim)
+            u = u.T.reshape(-1, self.pd[2][nt], self.vd[nt])
+        self.tensors[nt] = u
+        if normalize:
+            r /= np.linalg.norm(r)
+        tensor_ = self.get_tensor(nt-1, False)
+        tensor_ = np.tensordot(tensor_, r, [[-1], [1]])
+        self.tensors[nt-1] = tensor_
+        self.vd[nt-1] = r.shape[0]
+        return lm
+
+    def __svd_or_qr(self, way, tensor, if_trun, cut_dim):
+        if way.lower() == 'svd':
+            u, lm, v = np.linalg.svd(tensor, full_matrices = False)
+            if if_trun:
+                u = u[:, :cut_dim]
+                r = np.diag(lm[:cut_dim]).dot(v[:cut_dim, :])
+            else:
+                r = np.diag(lm).dot(v)
+        if way.lower() == 'qr':
+            u, r = np.linalg.qr(tensor)
+            lm = None
+        return u, lm, r
     
 
 

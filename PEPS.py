@@ -156,7 +156,7 @@ class peps:
         <self|rhs>做内积
         目前仅支持一般形式，GL形式会转化为一般形式做内积
         按行收缩，头尾两侧分别进行
-        中间结果为一MPO，使用MPS存储，指标顺序为self, rhs, virtual(= self*rhs)
+        中间结果为一MPO
         :param self: 左矢
         :param rhs: 右矢
         :param cut_dim: 收缩过程裁剪维数，默认为最大虚拟指标的平方
@@ -178,20 +178,24 @@ class peps:
         if cut_dim == None:
             cut_dim = max(self.vd_max(), rhs.vd_max()) ** 2
 
-        mpo = list()
+        # i = 0 ~ int(n/2)
+        mpo0 = list()
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_vert[0][0], rhs.vd_vert[0][0], self.vd_hori[0][0] * rhs.vd_hori[0][0])
-        mpo += [tensor]
+        mpo0 += [tensor]
         for j in range(1, self.m -1):
             tensor = np.einsum('ijkp, lmnp ->ilknjm', self.tensors[0][j].conj(), rhs.tensors[0][j])
             tensor = tensor.reshape(self.vd_hori[0][j-1] * rhs.vd_hori[0][j-1], self.vd_vert[0][j], rhs.vd_vert[0][j], self.vd_hori[0][j] * rhs.vd_hori[0][j])
-            mpo += [tensor]
+            mpo0 += [tensor]
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_hori[0][-1] * rhs.vd_hori[0][-1], self.vd_vert[0][0], rhs.vd_vert[0][0])
-        mpo += [tensor]
-        mpo = MPS.mpo.init_tensors(mpo)
-        if debug:
-            print('success!')
+        mpo0 += [tensor]
+        mpo0 = MPS.mpo.init_tensors(mpo0)
+
+        for i in range(1, int(self.n/2)):
+
+        
+
 
 
 
