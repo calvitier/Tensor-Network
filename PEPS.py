@@ -151,7 +151,7 @@ class peps:
         return cls(tensors)
 
 
-    def inner(self, rhs, cut_dim = None, debug = False):
+    def inner(self, rhs, cut_dim = None, tol = 1e-6, debug = False):
         """
         <self|rhs>做内积
         目前仅支持一般形式，GL形式会转化为一般形式做内积
@@ -160,6 +160,7 @@ class peps:
         :param self: 左矢
         :param rhs: 右矢
         :param cut_dim: 收缩过程裁剪维数，默认为最大虚拟指标的平方
+        :param tol: 收缩过程中近似允许误差
         :return tensor: 内积结果
 
         """
@@ -179,20 +180,43 @@ class peps:
             cut_dim = max(self.vd_max(), rhs.vd_max()) ** 2
 
         # i = 0 ~ int(n/2)
-        mpo0 = list()
+        mpo1 = list()
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_vert[0][0], rhs.vd_vert[0][0], self.vd_hori[0][0] * rhs.vd_hori[0][0])
-        mpo0 += [tensor]
+        mpo1 += [tensor]
         for j in range(1, self.m -1):
             tensor = np.einsum('ijkp, lmnp ->ilknjm', self.tensors[0][j].conj(), rhs.tensors[0][j])
             tensor = tensor.reshape(self.vd_hori[0][j-1] * rhs.vd_hori[0][j-1], self.vd_vert[0][j], rhs.vd_vert[0][j], self.vd_hori[0][j] * rhs.vd_hori[0][j])
-            mpo0 += [tensor]
+            mpo1 += [tensor]
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_hori[0][-1] * rhs.vd_hori[0][-1], self.vd_vert[0][0], rhs.vd_vert[0][0])
-        mpo0 += [tensor]
-        mpo0 = MPS.mpo.init_tensors(mpo0)
+        mpo1 += [tensor]
+        mpo1 = MPS.mpo.init_tensors(mpo1)
 
+        
         for i in range(1, int(self.n/2)):
+            pd = np.zeros((2, self.m), dtype=int)
+            pd[0, :] = self.vd_vert[i, :]
+            pd[1, :] = rhs.vd_vert[i, :]
+            vd = np.ones(self.m - 1, dtype=int) * cut_dim
+            mpo = MPS.mpo.init_rand(pd, vd, self.m)
+            f = 1
+
+            # 迭代直至收敛
+            while f > tol:
+                mpo.center_orth(0, cut_dim=cut_dim, normalize=True)
+
+                # 计算r
+                r = list([np.zeros(1, dtype=int)] * self.m)
+                r[-1] = np.einsum('aij, ibkl, jcml, dkm -> abcd', mpo.tensors[-1].conj(), self.tensors[i][-1].conj(), rhs.tensors[i][-1], mpo1.tensors[-1])
+                for j in range(self.m - 3, -1, -1):
+                    r[j] = np.einsum('xyzw, aijx, biykl, cjzml, dkmw -> abcd',r[j+1], mpo.tensors[j].conj(), self.tensors[i][j].conj(), rhs.tensors[i][j], mpo1.tensors[j])
+                
+                # 更新mpo.tensors
+                # ！！！从这开始写，先测试计算r部分
+                for j in range(1, self.m - 1):
+                    mpo.center_orth(j, cut_dim=cut_dim, normalize=True)
+
 
         
 

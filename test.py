@@ -1,6 +1,7 @@
 import numpy as np
 import PEPS
 import MPS
+import copy
 
 """
 d = 2
@@ -57,8 +58,16 @@ print(lm)
 x = PEPS.peps.init_rand(2, 4, (3, 3))
 x.inner(x, debug=True)
 """
+"""
 mpo = MPS.mpo.init_rand(4, 10, 4)
 mpo.center_orth(0, cut_dim=4, normalize=True)
 x = mpo.get_tensor(0)
 # result = np.einsum('ibcd, jbcd -> ij', mpo.tensors[1], mpo.tensors[1])
 print(np.linalg.norm(x))
+"""
+mpo = MPS.mpo.init_rand(4, 10, 4)
+x = copy.deepcopy(mpo)
+print(x.pd, '\n')
+print(x.vd, '\n')
+for n in range(0, x.length):
+    print(np.linalg.norm(x.tensors[n]-mpo.tensors[n]))

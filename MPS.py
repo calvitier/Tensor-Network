@@ -456,7 +456,7 @@ class mpo:
     - tensors: 为list，储存MPO中每个小张量
     - center: 正交中心，-1表示不为中心正交形式
     - pd: 物理指标矩阵，[0,:]为上，[1,:]为下，[2,:]为前两者相乘
-    - vd: 虚拟指标矩阵
+    - vd: 虚拟指标数组
 
     注：
         垂直方向为物理指标，水平方向为虚拟指标
@@ -481,7 +481,7 @@ class mpo:
                |
                2
     """
-    def __init__(self, tensors):
+    def __init__(self, tensors, pd = None, vd = None):
         """
         建议使用init_rand, init_tensors生成
         """
@@ -491,31 +491,38 @@ class mpo:
 
         self.pd = np.zeros((3, self.length), dtype=int)
         self.vd = np.zeros(self.length - 1, dtype=int)
-        self.pd[0][0] = tensors[0].shape[0]
-        self.pd[1][0] = tensors[0].shape[1]
-        self.vd[0] = tensors[0].shape[-1]
-        for n in range(1, self.length - 1):
-            self.pd[0][n] = tensors[n].shape[1]
-            self.pd[1][n] = tensors[n].shape[2]
-            self.vd[n] = tensors[n].shape[-1]
-        self.pd[0][-1] = tensors[-1].shape[1]
-        self.pd[1][-1] = tensors[-1].shape[2]
+
+        if pd == None or vd == None:
+            self.pd[0][0] = tensors[0].shape[0]
+            self.pd[1][0] = tensors[0].shape[1]
+            self.vd[0] = tensors[0].shape[-1]
+            for n in range(1, self.length - 1):
+                self.pd[0][n] = tensors[n].shape[1]
+                self.pd[1][n] = tensors[n].shape[2]
+                self.vd[n] = tensors[n].shape[-1]
+            self.pd[0][-1] = tensors[-1].shape[1]
+            self.pd[1][-1] = tensors[-1].shape[2]
+        else:
+            self.pd[:2, :] = pd
+            self.vd = vd 
 
         for n in range(0, self.length):
             self.pd[2][n] = self.pd[0][n] * self.pd[1][n]
 
         
     @classmethod
-    def init_rand(cls, d, chi, length):
+    def init_rand(cls, pd, vd, length):
         """
         随机初始化
+        :param pd: 物理指标矩阵，[0,:]为上，[1,:]为下
+        :param vd: 虚拟指标数组
 
         """
-        tensors = [np.random.rand(d, d, chi)]
-        for _ in range(1,length-1):
-            tensors += [np.random.rand(chi, d, d, chi)]
-        tensors += [np.random.rand(chi, d, d)]
-        return cls(tensors)
+        tensors = [np.random.rand(pd[0][0], pd[1][0], vd[0])]
+        for n in range(1,length-1):
+            tensors += [np.random.rand(vd[n-1], pd[0][n], pd[1][n], vd[n])]
+        tensors += [np.random.rand(vd[-1], pd[0][-1], pd[1][-1])]
+        return cls(tensors, pd, vd)
 
     @classmethod
     def init_tensors(cls, tensors):  
