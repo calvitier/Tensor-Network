@@ -199,49 +199,150 @@ class peps:
             pd[0, :] = self.vd_vert[i, :]
             pd[1, :] = rhs.vd_vert[i, :]
             vd = np.ones(self.m - 1, dtype=int) * cut_dim
-            mpo = MPS.mpo.init_rand(pd, vd, self.m)
+            mpo_t = MPS.mpo.init_rand(pd, vd, self.m)
             # f = 1
 
-            # 迭代直至收敛
             # while f > tol:
-            mpo.center_orth(0, cut_dim=cut_dim, normalize=True)
-
-            # 计算r
-            r = list([np.zeros(1, dtype=int)] * (self.m - 1))
-            r[-1] = np.einsum('aij, ibkl, jcml, dkm -> abcd', mpo.tensors[-1].conj(), self.tensors[i][-1].conj(), rhs.tensors[i][-1], mpo1.tensors[-1])
-            for j in range(self.m - 2, 0, -1):
-                print(j)
-                # numpy无法做五阶张量einsum，改用torch
-                t = list()
-                t += [tc.from_numpy(r[j])]
-                t += [tc.from_numpy(mpo.tensors[j].conj())]
-                t += [tc.from_numpy(self.tensors[i][j].conj())]
-                t += [tc.from_numpy(rhs.tensors[i][j])]
-                t += [tc.from_numpy(mpo1.tensors[j])]
-                if debug:
-                    for n in range(0, 5):
-                        print(t[n].size())
-                r[j-1] = tc.einsum('xyzw, aijx, biykl, cjzml, dkmw -> abcd', t[0], t[1], t[2], t[3], t[4])
-                r[j-1] = r[j-1].numpy()
-            
-            
-            if debug:
-                for n in range(0, self.m - 1):
-                    print(r[n].shape)
+            mpo_t = self.__inner_left2right(rhs, i, mpo1, mpo_t, cut_dim=cut_dim, debug=debug)
+            mpo_t = self.__inner_right2left(rhs, i, mpo1, mpo_t, cut_dim=cut_dim, debug=debug)
             """
-            # 更新mpo.tensors
-            for j in range(1, self.m - 1):
-                mpo.center_orth(j, cut_dim=cut_dim, normalize=True)
+            ！！！从这开始写！！！
             """
 
 
+
+    def __inner_left2right(self, rhs, i, mpo, mpo_t, cut_dim = -1, debug = False):
+        """
+        做内积过程中，对i行，从左至右求解近似
+        :param i: 行
+        :param mpo: 当前mpo
+        :param mpo_t: 近似过程量
+
+        """
+        mpo_t.center_orth(0, cut_dim=cut_dim)
+
+        # 计算r
+        r = list([tc.zeros(1)] * (self.m - 1))
+        # numpy无法做五阶张量einsum，改用torch
+        t = list()
+        t += [tc.from_numpy(mpo_t.tensors[-1].conj())]
+        t += [tc.from_numpy(self.tensors[i][-1].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][-1])]
+        t += [tc.from_numpy(mpo.tensors[-1])]
+        r[-1] = tc.einsum('aij, ibkl, jcml, dkm -> dbca', t[0], t[1], t[2], t[3])
+        for j in range(self.m - 2, 0, -1):
+            t = list()
+            t += [tc.from_numpy(mpo_t.tensors[j].conj())]
+            t += [tc.from_numpy(self.tensors[i][j].conj())]
+            t += [tc.from_numpy(rhs.tensors[i][j])]
+            t += [tc.from_numpy(mpo.tensors[j])]
+            r[j-1] = tc.einsum('xyzw, aijx, biykl, cjzml, dkmw -> dbca',r[j], t[0], t[1], t[2], t[3])
         
+        # 更新mpo_t.tensors
+        # j = 0
+        t = list()
+        t += [tc.from_numpy(mpo.tensors[0])]
+        t += [tc.from_numpy(self.tensors[i][0].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][0])]
+        mpo_t.tensors[0] = tc.einsum('ija, iblm, jcnm, abcd -> lnd', t[0], t[1], t[2], r[0])
+        t += [mpo_t.tensors[0].conj()]
+        mpo_t.tensors[0] = mpo_t.tensors[0].numpy()
+        # 计算l
+        mpo_t.center_orth(1, cut_dim=cut_dim)
+        l = list([tc.zeros(1)] * (self.m))  # l[0]不使用
+        l[1] = tc.einsum('ija, iblm, jcnm, lnd -> abcd', t[0], t[1], t[2], t[3])
+        # j = 1 ~ m-2
+        for j in range(1, self.m - 1):
+            t = list()
+            t += [tc.from_numpy(mpo.tensors[j])]
+            t += [tc.from_numpy(self.tensors[i][j].conj())]
+            t += [tc.from_numpy(rhs.tensors[i][j])]
+            mpo_t.tensors[j] = tc.einsum('abcd, aijx, biykl, cjzml, xyzw -> dkmw', l[j], t[0], t[1], t[2], r[j])
+            t += [mpo_t.tensors[j].conj()]
+            mpo_t.tensors[j] = mpo_t.tensors[j].numpy()
 
+            mpo_t.center_orth(j+1, cut_dim=cut_dim)
+            l[j+1] = tc.einsum('abcd, aijx, biykl, cjzml, dkmw -> xyzw', l[j], t[0], t[1], t[2], t[3])
+        
+        # j = m-1
+        t = list()
+        t += [tc.from_numpy(mpo.tensors[-1])]
+        t += [tc.from_numpy(self.tensors[i][-1].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][-1])]
+        mpo_t.tensors[-1] = tc.einsum('abcd, aij, ibkm, jclm -> dkl', l[-1], t[0], t[1], t[2])
+        mpo_t.tensors[-1] = mpo_t.tensors[-1].numpy()
 
+        if debug:
+            print('success!')
 
+        return mpo_t
 
+    def __inner_right2left(self, rhs, i, mpo, mpo_t, cut_dim = -1, debug = False):
+        """
+        做内积过程中，对i行，从右至左求解近似
+        :param i: 行
+        :param mpo: 当前mpo
+        :param mpo_t: 近似过程量
 
+        """
+        mpo_t.center_orth(-1, cut_dim=cut_dim)
 
+        # 计算l
+        l = list([tc.zeros(1)] * self.m)    # l[0]不使用
+        # numpy无法做五阶张量einsum，改用torch
+        t = list()
+        t += [tc.from_numpy(mpo.tensors[0])]
+        t += [tc.from_numpy(self.tensors[i][0].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][0])]
+        t += [tc.from_numpy(mpo_t.tensors[0].conj())]
+        l[1] = tc.einsum('ija, iblm, jcnm, lnd -> abcd', t[0], t[1], t[2], t[3])
+
+        for j in range(self.m - 2, 0, -1):
+            t = list()
+            t += [tc.from_numpy(mpo.tensors[j])]
+            t += [tc.from_numpy(self.tensors[i][j].conj())]
+            t += [tc.from_numpy(rhs.tensors[i][j])]
+            t += [tc.from_numpy(mpo_t.tensors[j].conj())]
+            l[j+1] = tc.einsum('abcd, aijx, biykl, cjzml, dkmw -> xyzw', l[j], t[0], t[1], t[2], t[3])
+        
+        # 更新mpo_t.tensors
+        # j = m-1
+        t = list()
+        t += [tc.from_numpy(mpo.tensors[-1])]
+        t += [tc.from_numpy(self.tensors[i][-1].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][-1])]
+        mpo_t.tensors[-1] = tc.einsum('abcd, aij, ibkm, jclm -> dkl', l[-1], t[0], t[1], t[2])
+        t += [mpo_t.tensors[-1].conj()]
+        mpo_t.tensors[-1] = mpo_t.tensors[-1].numpy()
+        # 计算r
+        mpo_t.center_orth(-2, cut_dim=cut_dim)
+        r = list([tc.zeros(1)] * (self.m - 1))
+        r[-1] = tc.einsum('aij, ibkl, jcml, dkm -> dbca', t[3], t[1], t[2], t[0])
+        # j = m-2 ~ 1
+        for j in range(self.m - 2, 0, -1):
+            t = list()
+            t += [tc.from_numpy(mpo.tensors[j])]
+            t += [tc.from_numpy(self.tensors[i][j].conj())]
+            t += [tc.from_numpy(rhs.tensors[i][j])]
+            mpo_t.tensors[j] = tc.einsum('abcd, aijx, biykl, cjzml, xyzw -> dkmw', l[j], t[0], t[1], t[2], r[j])
+            t += [mpo_t.tensors[j].conj()]
+            mpo_t.tensors[j] = mpo_t.tensors[j].numpy()
+
+            mpo_t.center_orth(j-1, cut_dim=cut_dim)
+            r[j-1] = tc.einsum('xyzw, aijx, biykl, cjzml, dkmw -> dbca',r[j], t[3], t[1], t[2], t[0])
+        
+        # j = 0
+        t = list()
+        t += [tc.from_numpy(mpo.tensors[0])]
+        t += [tc.from_numpy(self.tensors[i][0].conj())]
+        t += [tc.from_numpy(rhs.tensors[i][0])]
+        mpo_t.tensors[0] = tc.einsum('ija, iblm, jcnm, abcd -> lnd', t[0], t[1], t[2], r[0])
+        mpo_t.tensors[0] = mpo_t.tensors[0].numpy()
+
+        if debug:
+            print('success!')
+
+        return mpo_t
 
     def vd_max(self):
         """

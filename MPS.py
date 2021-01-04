@@ -110,6 +110,9 @@ class mps:
         :param normalize: 归一化，默认不归一
 
         """
+        if center < 0:
+            center += self.length
+        
         if self.center < 0:
             self.orth_n1_n2(0, center, way, cut_dim, normalize)
             self.orth_n1_n2(self.length-1, center, way, cut_dim, normalize)
@@ -549,6 +552,9 @@ class mpo:
         :param normalize: 归一化，默认不归一
 
         """
+        if center < 0:
+            center += self.length
+        
         # 转化为MPS
         self.tensors[0] = self.tensors[0].reshape(self.pd[2][0], self.vd[0])
         for n in range(1, self.length - 1):

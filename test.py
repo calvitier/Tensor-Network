@@ -56,8 +56,9 @@ print(lm)
 """
 
 
-x = PEPS.peps.init_rand(2, 4, (3, 3))
+x = PEPS.peps.init_rand(2, 4, (5, 3))
 x.inner(x, debug=True)
+
 
 """
 x = tc.rand((2, 3, 4, 5, 6))
