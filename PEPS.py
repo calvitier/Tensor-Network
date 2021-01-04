@@ -194,28 +194,45 @@ class peps:
         mpo1 = MPS.mpo.init_tensors(mpo1)
 
         
-        for i in range(1, int(self.n/2)):
+        for i in range(1, int(self.n/2) + 1):
             pd = np.zeros((2, self.m), dtype=int)
             pd[0, :] = self.vd_vert[i, :]
             pd[1, :] = rhs.vd_vert[i, :]
             vd = np.ones(self.m - 1, dtype=int) * cut_dim
             mpo = MPS.mpo.init_rand(pd, vd, self.m)
-            f = 1
+            # f = 1
 
             # 迭代直至收敛
-            while f > tol:
-                mpo.center_orth(0, cut_dim=cut_dim, normalize=True)
+            # while f > tol:
+            mpo.center_orth(0, cut_dim=cut_dim, normalize=True)
 
-                # 计算r
-                r = list([np.zeros(1, dtype=int)] * self.m)
-                r[-1] = np.einsum('aij, ibkl, jcml, dkm -> abcd', mpo.tensors[-1].conj(), self.tensors[i][-1].conj(), rhs.tensors[i][-1], mpo1.tensors[-1])
-                for j in range(self.m - 3, -1, -1):
-                    r[j] = np.einsum('xyzw, aijx, biykl, cjzml, dkmw -> abcd',r[j+1], mpo.tensors[j].conj(), self.tensors[i][j].conj(), rhs.tensors[i][j], mpo1.tensors[j])
-                
-                # 更新mpo.tensors
-                # ！！！从这开始写，先测试计算r部分
-                for j in range(1, self.m - 1):
-                    mpo.center_orth(j, cut_dim=cut_dim, normalize=True)
+            # 计算r
+            r = list([np.zeros(1, dtype=int)] * (self.m - 1))
+            r[-1] = np.einsum('aij, ibkl, jcml, dkm -> abcd', mpo.tensors[-1].conj(), self.tensors[i][-1].conj(), rhs.tensors[i][-1], mpo1.tensors[-1])
+            for j in range(self.m - 2, 0, -1):
+                print(j)
+                # numpy无法做五阶张量einsum，改用torch
+                t = list()
+                t += [tc.from_numpy(r[j])]
+                t += [tc.from_numpy(mpo.tensors[j].conj())]
+                t += [tc.from_numpy(self.tensors[i][j].conj())]
+                t += [tc.from_numpy(rhs.tensors[i][j])]
+                t += [tc.from_numpy(mpo1.tensors[j])]
+                if debug:
+                    for n in range(0, 5):
+                        print(t[n].size())
+                r[j-1] = tc.einsum('xyzw, aijx, biykl, cjzml, dkmw -> abcd', t[0], t[1], t[2], t[3], t[4])
+                r[j-1] = r[j-1].numpy()
+            
+            
+            if debug:
+                for n in range(0, self.m - 1):
+                    print(r[n].shape)
+            """
+            # 更新mpo.tensors
+            for j in range(1, self.m - 1):
+                mpo.center_orth(j, cut_dim=cut_dim, normalize=True)
+            """
 
 
         

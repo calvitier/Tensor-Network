@@ -492,7 +492,7 @@ class mpo:
         self.pd = np.zeros((3, self.length), dtype=int)
         self.vd = np.zeros(self.length - 1, dtype=int)
 
-        if pd == None or vd == None:
+        if type(pd) == type(None) or type(vd) == type(None):
             self.pd[0][0] = tensors[0].shape[0]
             self.pd[1][0] = tensors[0].shape[1]
             self.vd[0] = tensors[0].shape[-1]
