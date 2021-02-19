@@ -689,6 +689,21 @@ class mpo:
             lm = None
         return u, lm, r
     
+    def inner(self, rhs):
+        """
+        <self|rhs>做内积
+        :param self: 左矢
+        :param rhs: 右矢
+        :return tensor: 内积结果
+        """
+        assert self.length == rhs.length
+        assert self.pd.all() == rhs.pd.all()
+
+        tensor = np.einsum('ijk, ijl->kl', self.tensors[0].conj(), rhs.tensors[0])
+        for n in range(1, self.length-1):
+            tensor = np.einsum('xy, xijk, yijl->kl', tensor, self.tensors[n].conj(), rhs.tensors[n])
+        tensor = np.einsum('xy, xij, yij->', tensor, self.tensors[-1].conj(), rhs.tensors[-1])
+        return tensor
 
 
 
