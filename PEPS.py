@@ -151,7 +151,7 @@ class peps:
         return cls(tensors)
 
 
-    def inner(self, rhs, cut_dim = None, tol = 1e-6, debug = False):
+    def inner(self, rhs, cut_dim = None, tol = 1e-3, debug = False):
         """
         <self|rhs>做内积
         目前仅支持一般形式，GL形式会转化为一般形式做内积
@@ -179,35 +179,100 @@ class peps:
         if cut_dim == None:
             cut_dim = max(self.vd_max(), rhs.vd_max()) ** 2
 
-        # i = 0 ~ int(n/2)
-        mpo1 = list()
+        # i = 0
+        mpo_t1 = list()
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_vert[0][0], rhs.vd_vert[0][0], self.vd_hori[0][0] * rhs.vd_hori[0][0])
-        mpo1 += [tensor]
+        mpo_t1 += [tensor]
         for j in range(1, self.m -1):
             tensor = np.einsum('ijkp, lmnp ->ilknjm', self.tensors[0][j].conj(), rhs.tensors[0][j])
             tensor = tensor.reshape(self.vd_hori[0][j-1] * rhs.vd_hori[0][j-1], self.vd_vert[0][j], rhs.vd_vert[0][j], self.vd_hori[0][j] * rhs.vd_hori[0][j])
-            mpo1 += [tensor]
+            mpo_t1 += [tensor]
         tensor = np.einsum('ijp, mnp ->imjn', self.tensors[0][0].conj(), rhs.tensors[0][0])
         tensor = tensor.reshape(self.vd_hori[0][-1] * rhs.vd_hori[0][-1], self.vd_vert[0][0], rhs.vd_vert[0][0])
-        mpo1 += [tensor]
-        mpo1 = MPS.mpo.init_tensors(mpo1)
+        mpo_t1 += [tensor]
+        mpo_t1 = MPS.mpo.init_tensors(mpo_t1)
+        mpo_t1.center_orth(0, cut_dim=cut_dim)
 
+        # i = 1 ~ n-2
+        for i in range(1, self.n-1):
+            mpo_t2 = list()
+            # j = 0
+            t = list()
+            t += [tc.from_numpy(self.tensors[i][0].conj())]
+            t += [tc.from_numpy(mpo_t1.tensors[0])]
+            t += [tc.from_numpy(rhs.tensors[i][0])]
+            mpo_t2 += [tc.einsum('abcd, axk, xyzd -> czbky', t[0], t[1], t[2])]
+            vd1 = self.vd_hori[i][0] * mpo_t1.vd[0] * rhs.vd_hori[i][0]
+            mpo_t2[0] = mpo_t2[0].reshape(self.vd_vert[i][0], rhs.vd_vert[i][0], vd1)
+            mpo_t2[0] = mpo_t2[0].numpy()
+            # j = 1 ~ m-2
+            for j in range(1, self.m-1):
+                t = list()
+                t += [tc.from_numpy(self.tensors[i][j].conj())]
+                t += [tc.from_numpy(mpo_t1.tensors[j])]
+                t += [tc.from_numpy(rhs.tensors[i][j])]
+                mpo_t2 += [tc.einsum('abcde, ibyl, xyzwe -> aixdwclz', t[0], t[1], t[2])]
+                vd2 = self.vd_hori[i][j] * mpo_t1.vd[j] * rhs.vd_hori[i][j]
+                mpo_t2[j] = mpo_t2[j].reshape(vd1, self.vd_vert[i][0], rhs.vd_vert[i][0], vd2)
+                mpo_t2[j] = mpo_t2[j].numpy()
+                vd1 = vd2
+            # j = -1
+            t = list()
+            t += [tc.from_numpy(self.tensors[i][-1].conj())]
+            t += [tc.from_numpy(mpo_t1.tensors[-1])]
+            t += [tc.from_numpy(rhs.tensors[i][-1])]
+            mpo_t2 += [tc.einsum('abcd, iax, xyzd -> biycz', t[0], t[1], t[2])]
+            mpo_t2[-1] = mpo_t2[-1].reshape(vd1, self.vd_vert[i][-1], rhs.vd_vert[i][-1])
+            mpo_t2[-1] = mpo_t2[-1].numpy()
+
+            mpo_t1 = MPS.mpo.init_tensors(mpo_t2)
+            mpo_t1.center_orth(0, cut_dim=cut_dim)
         
-        for i in range(1, int(self.n/2) + 1):
-            pd = np.zeros((2, self.m), dtype=int)
-            pd[0, :] = self.vd_vert[i, :]
-            pd[1, :] = rhs.vd_vert[i, :]
-            vd = np.ones(self.m - 1, dtype=int) * cut_dim
-            mpo_t = MPS.mpo.init_rand(pd, vd, self.m)
-            # f = 1
+        # i = -1
+        # j = 0
+        t = list()
+        t += [tc.from_numpy(self.tensors[-1][0].conj())]
+        t += [tc.from_numpy(mpo_t1.tensors[0])]
+        t += [tc.from_numpy(rhs.tensors[-1][0])]
+        tensor = tc.einsum('abc, byk, xyc -> akx', t[0], t[1], t[2])
+        # j = 1 ~ m-2
+        for j in range(1, self.m-1):
+            t = list()
+            t += [tc.from_numpy(self.tensors[-1][j].conj())]
+            t += [tc.from_numpy(mpo_t1.tensors[j])]
+            t += [tc.from_numpy(rhs.tensors[-1][j])]
+            tensor_t = tc.einsum('abcd, iczl, xyzd -> aixbly', t[0], t[1], t[2])
+            tensor = tc.einsum('abc, abcdef -> def', tensor, tensor_t)
+        # j = -1
+        t = list()
+        t += [tc.from_numpy(self.tensors[-1][-1].conj())]
+        t += [tc.from_numpy(mpo_t1.tensors[-1])]
+        t += [tc.from_numpy(rhs.tensors[-1][-1])]
+        tensor_t = tc.einsum('abc, iby, xyc -> aix', t[0], t[1], t[2])
+        inner = tc.einsum('abc, abc ->', tensor, tensor_t)
 
-            # while f > tol:
-            mpo_t = self.__inner_left2right(rhs, i, mpo1, mpo_t, cut_dim=cut_dim, debug=debug)
-            mpo_t = self.__inner_right2left(rhs, i, mpo1, mpo_t, cut_dim=cut_dim, debug=debug)
-            """
-            ！！！从这开始写！！！
-            """
+        return inner.item()
+
+
+        """
+        
+        pd = np.zeros((2, self.m), dtype=int)
+        pd[0, :] = self.vd_vert[i, :]
+        pd[1, :] = rhs.vd_vert[i, :]
+        vd = np.ones(self.m - 1, dtype=int) * cut_dim
+        mpo_t2 = MPS.mpo.init_rand(pd, vd, self.m)
+        mpo_t1_inner = mpo_t1.inner(mpo_t1)
+        f = 1
+
+        while f > tol:
+            mpo_t2 = self.__inner_left2right(rhs, i, mpo_t1, mpo_t2, cut_dim=cut_dim, debug=debug)
+            mpo_t2 = self.__inner_right2left(rhs, i, mpo_t1, mpo_t2, cut_dim=cut_dim, debug=debug)
+            f = mpo_t1_inner + mpo_t2.inner(mpo_t2) - mpo_t2.inner(mpo_t1) - mpo_t1.inner(mpo_t2)
+            print(f)
+        
+        mpo_t1 = mpo_t2
+        """
 
 
 

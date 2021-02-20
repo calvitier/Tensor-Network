@@ -56,10 +56,7 @@ print(lm)
 """
 
 
-x = MPS.mpo.init_rand(2*np.ones((2,5), dtype=int), 10*np.ones(5, dtype=int), 5)
-y = x.inner(x)
-print(y)
-x.center_orth(0, cut_dim=4)
+x = PEPS.peps.init_rand(2, 5, (3, 3))
 y = x.inner(x)
 print(y)
 
