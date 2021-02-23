@@ -547,7 +547,116 @@ class peps:
             self.Lambda_vert += [Lambda]
 
             self.is_GL = True
-                
+    
+    def evolve_gate(self, gate, pos1, pos2, cut_dim = -1)
+        """
+        在pos1, pos2上做gate操作，自动转化为Gamma-Lambda形式
+         0    1
+         |    |
+          gate
+         |    |
+         2    3
+        :param gate: the two-body gate to evolve the MPS
+        :param pos1: the position of the first spin in the gate
+        :param pos2: the position of the second spin in the gate
+        
+        """
+
+        if not self.is_GL:
+            self.to_Gamma_Lambda()
+
+        if pos1[0] == pos2[0]:
+            hori = True
+            if pos1[1] > pos2[1]
+                pos1 = pos2
+        else:
+            hori = False
+            if pos1[0] > pos2[0]
+                pos1 = pos2
+        
+        if hori:
+            self.__evolve_gate_hori(gate, pos1, cut_dim=cut_dim)
+        else:
+            self.__evolve_gate_vert(gate, pos1, cut_dim=cut_dim)
+
+    def __evolve_gate_hori(self, gate, pos, cut_dim = -1):
+        (i, j) = pos
+        tensor1 = self.tensors[pos]
+        tensor2 = self.tensors[i][j+1]
+
+        # i = 0
+        if i == 0:
+            # tensor1
+            if j == 0:
+                tensor1 = np.tensordot(tensor1, np.diag(self.Lambda_vert[pos]), [[1], [0]])
+                tensor1 = np.rollaxis(tensor1, 0, 1)
+                tensor1 = tensor1.reshape(self.vd_vert[pos], self.vd_hori[pos] * self.pd[pos])
+            else:
+                tensor1 = np.tensordot(tensor1, np.diag(self.Lambda_hori[i][j-1]), [[0], [0]])
+                tensor1 = np.tensordot(tensor1, np.diag(self.Lambda_vert[pos]), [[2], [0]])
+                tensor1 = np.rollaxis(tensor1, 1, 2)
+                tensor1 = tensor1.reshape(self.vd_hori[i][j-1] * self.vd_vert[pos], self.vd_hori[pos] * self.pd[pos])
+
+            # tensor2
+            if j+1 == self.m-1:
+                tensor2 = np.tensordot(tensor2, np.diag(self.Lambda_vert[i][j+1]), [[1], [0]])
+                tensor2 = np.rollaxis(tensor2, 0, 1)
+                tensor2 = tensor2.reshape(self.vd_hori[i][j+1], self.vd_hori[pos] * self.pd[i][j+1])
+            else:
+                tensor2 = np.tensordot(tensor2, np.diag(self.Lambda_hori[i][j+1]), [[1], [0]])
+                tensor2 = np.tensordot(tensor2, np.diag(self.Lambda_vert[i][j+1]), [[2], [0]])
+                tensor2 = np.rollaxis(tensor2, 0, 2)
+                tensor2 = tensor2.reshape(self.vd_hori[i][j+1] * self.vd_vert[i][j+1], self.vd_hori[pos] * self.pd[i][j+1])
+
+        
+
+        q1, r1 = np.linalg.qr(tensor1)
+        q2, r2 = np.linalg.qr(tensor2)
+        r1.reshape(q1.shape[1], self.vd_hori[pos], self.pd[pos])
+        r2.reshape(q2.shape[1], self.vd_hori[pos], self.pd[i][j+1])
+        tensor = np.einsum('abcd, ijc, xyd, jy -> aibx', gate, r1, r2, np.diag(self.Lambda_hori[pos]))
+        tensor = tensor.reshape(self.pd[pos] * q1.shape[1], self.pd[i][j+1] * q2.shape[1])
+        r1, lm, r2 = np.linalg.svd(tensor, full_matrices = False)
+        if cut_dim < lm.size():
+            r1 = r1[:, :cut_dim]
+            self.Lambda_hori[pos] = lm[:cut_dim]
+            r2 = r2[:cut_dim, :]
+            self.vd_hori[pos] = cut_dim
+        else:
+            self.Lambda_hori[pos] = lm
+            self.vd_hori[pos] = lm.size()
+        r1 = r1.reshape(self.pd[pos], q1.shape[1], self.vd_hori[pos])
+        r1 = np.rollaxis(r1, 0, 2)
+        r2 = r2.reshape(self.vd_hori[pos], self.pd[i][j+1], q2.shape[1])
+        r2 = np.rollaxis(r2, 2, 0)
+        tensor1 = np.tensordot(q1, r1, [[1], [0]])
+        tensor2 = np.tensordot(q2, r2, [[1], [0]])
+
+
+        # i = 0
+        if i == 0:
+            # tensor1
+            if j == 0:
+                tensor1 = tensor1.reshape(self.vd_vert[pos], self.vd_hori[pos], self.pd[pos])
+                tensor1 = np.rollaxis(tensor1, 1, 0)
+                tensor1 = np.tensordot(tensor1, np.diag(1/self.Lambda_vert[pos]), [[1], [0]])
+            else:
+                tensor1 = tensor1.reshape(self.vd_hori[i][j-1], self.vd_vert[pos], self.vd_hori[pos], self.pd[pos])
+                tensor1 = np.rollaxis(tensor1, 2, 1)
+                tensor1 = np.tensordot(tensor1, np.diag(1/self.Lambda_hori[i][j-1]), [[0], [0]])
+                tensor1 = np.tensordot(tensor1, np.diag(1/self.Lambda_vert[pos]), [[2], [0]])
+
+            # tensor2
+            if j+1 == self.m-1:
+                tensor2 = tensor2.reshape(self.vd_hori[i][j+1], self.vd_hori[pos], self.pd[i][j+1])
+                tensor2 = np.rollaxis(tensor2, 1, 0)
+                tensor2 = np.tensordot(tensor2, np.diag(1/self.Lambda_vert[i][j+1]), [[1], [0]])
+            else:
+                tensor2 = tensor2.reshape(self.vd_hori[i][j+1], self.vd_vert[i][j+1], self.vd_hori[pos], self.pd[i][j+1])
+                tensor2 = np.rollaxis(tensor2, 2, 0)
+                tensor2 = np.tensordot(tensor2, np.diag(1/self.Lambda_hori[i][j+1]), [[1], [0]])
+                tensor2 = np.tensordot(tensor2, np.diag(1/self.Lambda_vert[i][j+1]), [[2], [0]])
+ 
                 
 
 
