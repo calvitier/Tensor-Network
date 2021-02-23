@@ -57,8 +57,17 @@ print(lm)
 
 
 x = PEPS.peps.init_rand(2, 5, (3, 3))
-y = x.inner(x)
-print(y)
+"""
+for i in range(0, 3):
+    for j in range(0, 3):
+        print(x.tensors[1][1].shape)
+"""
+I = np.eye(4).reshape(2, 2, 2, 2)
+tensors = x.tensors
+x.evolve_gate(I, (2, 0), (2, 1), debug=True)
+tensor = tensors[1][1] - x.tensors[1][1]
+print(np.linalg.norm(tensor))
+
 
 """
 x = tc.rand((2, 3, 4, 5, 6))
