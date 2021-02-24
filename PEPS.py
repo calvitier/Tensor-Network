@@ -574,12 +574,13 @@ class peps:
             hori = False
             if pos1[0] > pos2[0]:
                 pos1 = pos2
-        
+        """
         if debug:
             print(pos1)
             for i in range(0, 3):
                 for j in range(0, 3):
                     print(self.tensors[i][j].shape)
+        """
                     
         if hori:
             self.__evolve_gate_hori(gate, pos1, cut_dim=cut_dim, debug=debug)
@@ -600,14 +601,13 @@ class peps:
             else:
                 tensor1 = np.einsum('abcd, ai, cj -> ijbd', tensor1, np.diag(self.Lambda_hori[i][j-1]), np.diag(self.Lambda_vert[i][j]))
                 tensor1 = tensor1.reshape(self.vd_hori[i][j-1] * self.vd_vert[i][j], self.vd_hori[i][j] * self.pd[i][j])
-
             # tensor2
             if j+1 == self.m-1:
                 tensor2 = np.einsum('abc, bi -> iac', tensor2, np.diag(self.Lambda_vert[i][j+1]))
                 tensor2 = tensor2.reshape(self.vd_vert[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
             else:
                 tensor2 = np.einsum('abcd, bi, cj -> jiad', tensor2, np.diag(self.Lambda_hori[i][j+1]), np.diag(self.Lambda_vert[i][j+1]))
-                tensor2 = tensor2.reshape(self.vd_hori[i][j+1] * self.vd_vert[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
+                tensor2 = tensor2.reshape(self.vd_vert[i][j+1] * self.vd_hori[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
 
         # i = 1 ~ n-2
         if 0 < i < self.n-1:
@@ -620,7 +620,6 @@ class peps:
                 tensor1 = tensor1.reshape(self.vd_hori[i][j-1], self.vd_vert[i-1][j], self.vd_vert[i][j], self.vd_hori[i][j] * self.pd[i][j])
                 tensor1 = np.einsum('abcd, ai, bj, ck -> ijkd', tensor1, np.diag(self.Lambda_hori[i][j-1]), np.diag(self.Lambda_vert[i-1][j]), np.diag(self.Lambda_vert[i][j]))
                 tensor1 = tensor1.reshape(self.vd_hori[i][j-1] * self.vd_vert[i-1][j] * self.vd_vert[i][j], self.vd_hori[i][j] * self.pd[i][j])
-
             # tensor2
             if j+1 == self.m-1:
                 tensor2 = np.einsum('abcd, ai, cj -> ijbd', tensor2, np.diag(self.Lambda_vert[i-1][j+1]), np.diag(self.Lambda_vert[i][j+1]))
@@ -630,24 +629,35 @@ class peps:
                 tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1], self.vd_hori[i][j+1], self.vd_vert[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
                 tensor2 = np.einsum('abcd, ai, bj, ck -> ijkd', tensor2, np.diag(self.Lambda_vert[i][j+1]), np.diag(self.Lambda_vert[i-1][j+1]), np.diag(self.Lambda_hori[i][j+1]))
                 tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1] * self.vd_hori[i][j+1] * self.vd_vert[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
+        
+        # i = -1
+        if i == self.n-1:
+            # tensor1
+            if j == 0:
+                tensor1 = np.einsum('abc, bi -> iac', tensor1, np.diag(self.Lambda_vert[i-1][j]))
+                tensor1 = tensor1.reshape(self.vd_vert[i-1][j], self.vd_hori[i][j] * self.pd[i][j])
+            else:
+                tensor1 = np.einsum('abcd, ai, cj -> ijbd', tensor1, np.diag(self.Lambda_hori[i][j-1]), np.diag(self.Lambda_vert[i-1][j]))
+                tensor1 = tensor1.reshape(self.vd_hori[i][j-1] * self.vd_vert[i-1][j], self.vd_hori[i][j] * self.pd[i][j])
+            # tensor2
+            if j+1 == self.m-1:
+                tensor2 = np.einsum('abc, bi -> iac', tensor2, np.diag(self.Lambda_vert[i-1][j+1]))
+                tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
+            else:
+                tensor2 = np.einsum('abcd, bi, cj -> jiad', tensor2, np.diag(self.Lambda_hori[i][j+1]), np.diag(self.Lambda_vert[i-1][j+1]))
+                tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1] * self.vd_hori[i][j+1], self.vd_hori[i][j] * self.pd[i][j+1])
 
         
 
         q1, r1 = np.linalg.qr(tensor1)
         q2, r2 = np.linalg.qr(tensor2)
-        r1 = r1.reshape(r1.shape[0], self.vd_hori[i][j], self.pd[i][j])
-        r2 = r2.reshape(r2.shape[0], self.vd_hori[i][j], self.pd[i][j+1])
+        r1 = r1.reshape(q1.shape[1], self.vd_hori[i][j], self.pd[i][j])
+        r2 = r2.reshape(q2.shape[1], self.vd_hori[i][j], self.pd[i][j+1])
         tensor = np.einsum('abcd, ijc, xyd, jy -> aibx', gate, r1, r2, np.diag(self.Lambda_hori[i][j]))
         tensor = tensor.reshape(self.pd[i][j] * q1.shape[1], self.pd[i][j+1] * q2.shape[1])
-        r1, lm, r2 = np.linalg.svd(tensor, full_matrices = False)
-        if 0 < cut_dim < lm.size:
-            r1 = r1[:, :cut_dim]
-            self.Lambda_hori[i][j] = lm[:cut_dim]
-            r2 = r2[:cut_dim, :]
-            self.vd_hori[i][j] = cut_dim
-        else:
-            self.Lambda_hori[i][j] = lm
-            self.vd_hori[i][j] = lm.size
+        r1, lm, r2 = svd_cut(tensor, cut_dim=cut_dim)
+        self.Lambda_hori[i][j] = lm
+        self.vd_hori[i][j] = lm.size
         r1 = r1.reshape(self.pd[i][j], q1.shape[1], self.vd_hori[i][j])
         r1 = np.rollaxis(r1, 0, 2)
         r2 = r2.reshape(self.vd_hori[i][j], self.pd[i][j+1], q2.shape[1])
@@ -670,7 +680,7 @@ class peps:
                 tensor2 = tensor2.reshape(self.vd_vert[i][j+1], self.vd_hori[i][j], self.pd[i][j+1])
                 tensor2 = np.einsum('iac, bi -> abc', tensor2, np.diag(1/self.Lambda_vert[i][j+1]))
             else:
-                tensor2 = tensor2.reshape(self.vd_hori[i][j+1], self.vd_vert[i][j+1], self.vd_hori[i][j], self.pd[i][j+1])
+                tensor2 = tensor2.reshape(self.vd_vert[i][j+1], self.vd_hori[i][j+1], self.vd_hori[i][j], self.pd[i][j+1])
                 tensor2 = np.einsum('jiad, bi, cj -> abcd', tensor2, np.diag(1/self.Lambda_hori[i][j+1]), np.diag(1/self.Lambda_vert[i][j+1]))
 
         # i = 1 ~ n-2
@@ -695,13 +705,31 @@ class peps:
                 tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1], self.vd_hori[i][j+1], self.vd_vert[i][j+1], self.vd_hori[i][j], self.pd[i][j+1])
                 tensor2 = np.rollaxis(tensor2, 3, 0)
 
-                
+        # i = -1
+        if i == self.n-1:
+            # tensor1
+            if j == 0:
+                tensor1 = tensor1.reshape(self.vd_vert[i-1][j], self.vd_hori[i][j], self.pd[i][j])
+                tensor1 = np.einsum('iac, bi -> abc', tensor1, np.diag(1/self.Lambda_vert[i-1][j]))
+            else:
+                tensor1 = tensor1.reshape(self.vd_hori[i][j-1], self.vd_vert[i-1][j], self.vd_hori[i][j], self.pd[i][j])
+                tensor1 = np.einsum('ijbd, ai, cj -> abcd', tensor1, np.diag(1/self.Lambda_hori[i][j-1]), np.diag(1/self.Lambda_vert[i-1][j]))
+            # tensor2
+            if j+1 == self.m-1:
+                tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1], self.vd_hori[i][j], self.pd[i][j+1])
+                tensor2 = np.einsum('iac, bi -> abc', tensor2, np.diag(1/self.Lambda_vert[i-1][j+1]))
+            else:
+                tensor2 = tensor2.reshape(self.vd_vert[i-1][j+1], self.vd_hori[i][j+1], self.vd_hori[i][j], self.pd[i][j+1])
+                tensor2 = np.einsum('jiad, bi, cj -> abcd', tensor2, np.diag(1/self.Lambda_hori[i][j+1]), np.diag(1/self.Lambda_vert[i-1][j+1]))
+
+        self.tensors[i][j] = tensor1
+        self.tensors[i][j+1] = tensor2
 
 
             
 def svd_cut(matrix, cut_dim = -1):
     u, lm, v = np.linalg.svd(matrix, full_matrices=False)
-    if cut_dim > lm.size:
+    if 0 < cut_dim < lm.size:
         u = u[:, :cut_dim]
         lm = lm[:cut_dim]
         v = v[:cut_dim, :]

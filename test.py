@@ -57,16 +57,21 @@ print(lm)
 
 
 x = PEPS.peps.init_rand(2, 5, (3, 3))
+x.to_Gamma_Lambda()
 """
 for i in range(0, 3):
     for j in range(0, 3):
         print(x.tensors[1][1].shape)
 """
+(i, j) = (0, 1)
 I = np.eye(4).reshape(2, 2, 2, 2)
-tensors = x.tensors
-x.evolve_gate(I, (2, 0), (2, 1), debug=True)
-tensor = tensors[1][1] - x.tensors[1][1]
-print(np.linalg.norm(tensor))
+norm = np.linalg.norm(x.tensors[i][j])
+x.evolve_gate(I, (i, j), (i, j+1))
+norm1 = np.linalg.norm(x.tensors[i][j])
+diff = norm - norm1
+# print(tensor)
+print(norm)
+print(norm1)
 
 
 """
