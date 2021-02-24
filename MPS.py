@@ -395,7 +395,7 @@ class mps:
 
         tensor = np.tensordot(self.tensors[0].conj(), rhs.tensors[0], [[0], [0]])
         for n in range(1, self.length-1):
-            tensor = np.einsum('ij, ik, jl->kl', tensor, self.tensors[n].conj(), rhs.tensors[n])
+            tensor = np.einsum('ij, ixy, jxz->yz', tensor, self.tensors[n].conj(), rhs.tensors[n])
         tensor = np.einsum('ij, ik, jk->', tensor, self.tensors[-1].conj(), rhs.tensors[-1])
         return tensor
 

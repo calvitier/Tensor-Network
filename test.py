@@ -10,15 +10,13 @@ chi = 10
 length = 10
 m = MPS.mps.init_rand(d, chi, length)
 m.center_orth(m.length - 2, normalize=True)
-m0 = copy.deepcopy(m.tensors[-1])
-gate = 2 * np.eye(d ** 2).reshape([d, d, d, d])
-m.evolve_gate(gate, m.length - 2)
-m1 = copy.deepcopy(m.tensors[-1])
-diff = m1 - m0
-print(np.linalg.norm(diff))
-err = m1 - 2*m0
-print(np.linalg.norm(err))
-
+m2 = m.inner(m)
+gate = np.eye(d ** 2).reshape([d, d, d, d])
+m0 = copy.deepcopy(m)
+m.evolve_gate(gate, m.length - 2, cut_dim=d)
+mim = m0.inner(m)
+i = mim/m2
+print(i)
 """
 
 """
@@ -55,29 +53,28 @@ u, lm, v = PEPS.svd_cut(x)
 print(lm)
 """
 
-
+"""
 x = PEPS.peps.init_rand(2, 5, (3, 3))
 x.to_Gamma_Lambda()
-"""
-for i in range(0, 3):
-    for j in range(0, 3):
-        print(x.tensors[1][1].shape)
-"""
 (i, j) = (0, 1)
 I = np.eye(4).reshape(2, 2, 2, 2)
-norm = np.linalg.norm(x.tensors[i][j])
-x.evolve_gate(I, (i, j), (i, j+1))
-norm1 = np.linalg.norm(x.tensors[i][j])
-diff = norm - norm1
+tensor = copy.deepcopy(x.tensors[i][j])
+x.evolve_gate(I, (i, j), (i, j+1), cut_dim=5, debug=True)
+diff = tensor - x.tensors[i][j]
+norm = np.linalg.norm(diff)
 # print(tensor)
 print(norm)
-print(norm1)
-
-
 """
-x = tc.rand((2, 3, 4, 5, 6))
-y = tc.rand((2, 3, 4, 5, 6))
-ans = tc.einsum('abcde, abcij -> deij', x, y)
-ans = ans.numpy()
-print(ans.shape)
-"""
+
+pd = 2
+vd = 5
+shape = (3, 3)
+(i, j) = (0, 0)
+m = PEPS.peps.init_rand(pd, vd, shape)
+m2 = m.inner(m)
+gate = np.eye(pd ** 2).reshape([pd, pd, pd, pd])
+m0 = copy.deepcopy(m)
+m.evolve_gate(gate, (i, j), (i, j+1), cut_dim=pd)
+mim = m0.inner(m)
+I = mim/m2
+print(I)
