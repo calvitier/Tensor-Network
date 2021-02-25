@@ -167,14 +167,8 @@ class peps:
         assert self.shape == rhs.shape
         assert (self.pd == rhs.pd).all()
 
-        if self.is_GL:
-            self.to_PEPS()
-        if rhs.is_GL:
-            rhs.to_PEPS()
-        """
-        x = copy.deepcopy(self.tensors)
-        y = copy.deepcopy(rhs.tensors)
-        """
+        self.to_PEPS()
+        rhs.to_PEPS()
         
         if cut_dim == None:
             cut_dim = max(self.vd_max(), rhs.vd_max()) ** 2
@@ -419,6 +413,40 @@ class peps:
         转化为一般形式
 
         """
+        if self.is_GL:
+
+            # i = 0
+            # j = 0
+            self.tensors[0][0] = np.einsum('abc, ai, bj -> ijc', self.tensors[0][0], np.diag(self.Lambda_hori[0][0]), np.diag(self.Lambda_vert[0][0]))
+            # j = 1 ~ m-2
+            for j in range(1, self.m-1):
+                self.tensors[0][j] = np.einsum('abcd, bi, cj -> aijd', self.tensors[0][j], np.diag(self.Lambda_hori[0][j]), np.diag(self.Lambda_vert[0][j]))
+            # j = -1
+            self.tensors[0][-1] = np.einsum('abc, bi -> aic', self.tensors[0][-1], np.diag(self.Lambda_vert[0][-1]))
+
+            # i = 1 ~ n-2
+            for i in range(1, self.n-1):
+                # j = 0
+                self.tensors[i][0] = np.einsum('abcd, bi, cj -> aijd', self.tensors[i][0], np.diag(self.Lambda_hori[i][0]), np.diag(self.Lambda_vert[i][0]))
+                # j = 1 ~ m-2
+                for j in range(1, self.m-1):
+                    self.tensors[i][j] = np.einsum('abcde, ci, dj -> abije', self.tensors[i][j], np.diag(self.Lambda_hori[i][j]), np.diag(self.Lambda_vert[i][j]))
+                # j = -1
+                self.tensors[i][-1] = np.einsum('abcd, ci -> abid', self.tensors[i][-1], np.diag(self.Lambda_vert[i][-1]))
+
+            # i = -1
+            # j = 0
+            self.tensors[-1][0] = np.einsum('abc, ai -> ibc', self.tensors[-1][0], np.diag(self.Lambda_hori[-1][0]))
+            # j = 1 ~ m-2
+            for j in range(1, self.m-1):
+                self.tensors[-1][j] = np.einsum('abcd, bi -> aicd', self.tensors[-1][j], np.diag(self.Lambda_hori[-1][j]))
+            # j = -1
+            self.tensors[-1][-1] = self.tensors[-1][-1]
+
+            self.is_GL = False
+
+
+
 
     def to_Gamma_Lambda(self, cut_dim = -1, debug = False):
         """
@@ -563,8 +591,7 @@ class peps:
         
         """
 
-        if not self.is_GL:
-            self.to_Gamma_Lambda(cut_dim=cut_dim, debug=debug)
+        self.to_Gamma_Lambda(cut_dim=cut_dim, debug=debug)
 
         if pos1[0] == pos2[0]:
             hori = True

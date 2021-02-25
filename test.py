@@ -71,10 +71,14 @@ vd = 5
 shape = (3, 3)
 (i, j) = (0, 0)
 m = PEPS.peps.init_rand(pd, vd, shape)
-m2 = m.inner(m)
 gate = np.eye(pd ** 2).reshape([pd, pd, pd, pd])
+
+m.to_Gamma_Lambda()
 m0 = copy.deepcopy(m)
-m.evolve_gate(gate, (i, j), (i, j+1), cut_dim=pd)
-mim = m0.inner(m)
+m1 = copy.deepcopy(m)
+m2 = m0.inner(m0)
+m.evolve_gate(gate, (i, j), (i, j+1), cut_dim=vd)
+mim = m1.inner(m)
 I = mim/m2
 print(I)
+
