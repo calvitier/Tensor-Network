@@ -3,6 +3,7 @@ import torch as tc
 import PEPS
 import MPS
 import copy
+import Operator as op
 
 """
 d = 2
@@ -18,12 +19,38 @@ mim = m0.inner(m)
 i = mim/m2
 print(i)
 """
-
 """
+length = 20
 H = op.heisenberg_hamilt([1, 1, 1], [0, 0, 0])
-gs = MPS.ground_state(3, H, times=1e5)
+gs = MPS.ground_state(length, H, times=1e5, tol=1e-10)
 print('success!')
+gs0 = copy.deepcopy(gs)
+gsgs = gs0.inner(gs)
+for nt in range(0, length-1):
+    gs.evolve_gate(H.reshape(2, 2, 2, 2), nt)
+gsHgs = gs0.inner(gs)
+E_gs = gsHgs/gsgs
+print(E_gs)
 """
+
+length = 10
+H = op.heisenberg_hamilt([1, 1, 1], [0, 0, 0])
+psi0 = MPS.mps.init_rand(2, 2, length)
+psi0psi0 = psi0.inner(psi0)
+psi = copy.deepcopy(psi0)
+for nt in range(0, length-1):
+    psi.evolve_gate(H.reshape(2, 2, 2, 2), nt)
+psi0Hpsi0 = psi0.inner(psi)
+E0 = psi0Hpsi0/psi0psi0
+psi0.TEBD(H, times=100)
+psipsi = psi0.inner(psi0)
+psi = copy.deepcopy(psi0)
+for nt in range(0, length-1):
+    psi.evolve_gate(H.reshape(2, 2, 2, 2), nt)
+psiHpsi = psi0.inner(psi)
+E = psiHpsi/psipsi
+print(E0)
+print(E)
 
 """
 physdim = 2
@@ -65,7 +92,7 @@ norm = np.linalg.norm(diff)
 # print(tensor)
 print(norm)
 """
-
+"""
 pd = 2
 vd = 5
 shape = (3, 3)
@@ -81,4 +108,4 @@ m.evolve_gate(gate, (i, j), (i, j+1), cut_dim=vd)
 mim = m1.inner(m)
 I = mim/m2
 print(I)
-
+"""

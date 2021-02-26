@@ -258,7 +258,7 @@ class mps:
             s = tensor.shape
             u, lm, v = np.linalg.svd(tensor.reshape(s[0], s[1]*s[2]), full_matrices=False)
             if debug:
-                print(s)
+                print(s, cut_dim)
                 print(u.shape, lm.size, v.shape)
             if 0 < cut_dim < lm.size:
                 if center == nt or center == None:
@@ -280,12 +280,12 @@ class mps:
                     self.center = nt+1
                 self.virtdim[nt] = lm.size
         
-        elif nt == self.length - 2:
+        if nt == self.length - 2:
             tensor = np.einsum('iba,ac,klbc->ikl', tensor1, tensor2, gate)
             s = tensor.shape
             u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]), full_matrices=False)
             if debug:
-                print(s)
+                print(s, cut_dim)
                 print(u.shape, lm.size, v.shape)
             if 0 < cut_dim < lm.size:
                 if center == nt or center == None:
@@ -308,12 +308,13 @@ class mps:
                     self.center = nt+1
                 self.virtdim[nt] = lm.size
 
-        else:
+        # nt = 1 ~ length-3
+        if 0 < nt < self.length - 2:
             tensor = np.einsum('iba,acj,klbc->iklj', tensor1, tensor2, gate)
             s = tensor.shape
             u, lm, v = np.linalg.svd(tensor.reshape(s[0]*s[1], s[2]*s[3]), full_matrices=False)
             if debug:
-                print(s)
+                print(s, cut_dim)
                 print(u.shape, lm.size, v.shape)
             if 0 < cut_dim < lm.size:
                 if center == nt or center == None:
@@ -339,7 +340,7 @@ class mps:
         self.tensors[nt] = u
         self.tensors[nt+1] = v
 
-    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, tol = None, times = 1):
+    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, tol = None, times = 1, debug = False):
         """
         :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
         :param tau: 模拟步长
@@ -349,7 +350,7 @@ class mps:
 
         """
         if type(cut_dim) != list:
-            cut_dim = cut_dim * np.ones(self.length-1)
+            cut_dim = cut_dim * np.ones(self.length-1, dtype=int)
         if type(hamiltonion) == list:
             for n in range(0, self.length - 1):
                 hamiltonion[n] = expm(-1j * tau * hamiltonion[n]) # e^(-iHt)
@@ -358,7 +359,7 @@ class mps:
                 hamiltonion[n] = hamiltonion[n].reshape(self.physdim[n], self.physdim[n+1], self.physdim[n], self.physdim[n+1])
             for _ in range(0, times):
                 for n in range(0, self.length - 1):
-                    self.evolve_gate(hamiltonion[n], n, cut_dim[n], center = n+1)
+                    self.evolve_gate(hamiltonion[n], n, cut_dim[n], center = n+1, debug=debug)
         else:
             hamiltonion = expm(-1j * tau * hamiltonion) # e^(-iHt)
             if np.linalg.norm(np.imag(hamiltonion)) < 1e-15:
@@ -366,7 +367,7 @@ class mps:
             hamiltonion = hamiltonion.reshape(self.physdim[0], self.physdim[1], self.physdim[0], self.physdim[1])
             for _ in range(0, times):
                 for n in range(0, self.length - 1):
-                    self.evolve_gate(hamiltonion, n, cut_dim[n], center = n+1)
+                    self.evolve_gate(hamiltonion, n, cut_dim[n], center = n+1, debug=debug)
 
 
     def __sub__(self, rhs):
@@ -402,7 +403,7 @@ class mps:
 
     
 
-def ground_state(length, hamiltonion, physdim = None, tau = 1e-4, tol = 1e-6, times = 1e3):
+def ground_state(length, hamiltonion, physdim = None, tau = 1e-4, tol = 1e-6, times = 1e3, debug = False):
     """
     求哈密顿量list对应的基态，返回MPS
     :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
@@ -433,15 +434,15 @@ def ground_state(length, hamiltonion, physdim = None, tau = 1e-4, tol = 1e-6, ti
         d = np.sqrt(cut_dim).astype(int)
         m0 = mps.init_rand(d, cut_dim, length)
 
-    m0.TEBD(hamiltonion, tau, cut_dim, tol)
+    m0.TEBD(hamiltonion, tau, cut_dim, tol, debug=debug)
     m1 = mps.init_tensors(m0.tensors)
-    m1.TEBD(hamiltonion, tau, cut_dim, tol)
+    m1.TEBD(hamiltonion, tau, cut_dim, tol, debug=debug)
     err = (m1 - m0).norm()/m0.norm()
     n = 0
     while err > tol and n < times:
         m0 = mps.init_tensors(m1.tensors)
-        m1.TEBD(hamiltonion, tau, d**2, tol)
-        err = (m1 - m0).norm()/m0.norm()
+        m1.TEBD(hamiltonion, tau, d**2, tol, debug=debug)
+        err = 1 - m1.inner(m0)/m0.inner(m0)
         n += 1
     else:
         if n == times:
