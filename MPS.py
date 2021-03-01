@@ -101,6 +101,13 @@ class mps:
         vec = self.mps2tensor().reshape((-1,))
         return vec
 
+    def normalize(self):
+        norm = self.inner(self)
+        norm = np.power(norm, 1/(2*self.length))
+        for n in range(0, self.length):
+            self.tensors[n] = self.tensors[n]/norm
+        return self
+
     
     def center_orth(self, center, way = 'svd', cut_dim = -1, normalize = False):
         """

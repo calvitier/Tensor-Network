@@ -5,6 +5,18 @@ import MPS
 import copy
 import Operator as op
 
+np.random.seed(0)
+x = MPS.mps.init_rand(d = 2, chi = 5, length = 5)
+print('归一化前 <x|x> =', x.inner(x))
+x.normalize()
+print('归一化后 <x|x> =', x.inner(x))
+
+np.random.seed(0)
+x = MPS.mps.init_rand(d = 2, chi = 5, length = 5)
+print('归一化前 <x|x> =', x.inner(x))
+x.center_orth(center = 2, normalize = True)
+print('归一化后 <x|x> =', x.inner(x))
+
 """
 d = 2
 chi = 10
@@ -32,7 +44,7 @@ gsHgs = gs0.inner(gs)
 E_gs = gsHgs/gsgs
 print(E_gs)
 """
-
+"""
 length = 10
 H = op.heisenberg_hamilt([1, 1, 1], [0, 0, 0])
 psi0 = MPS.mps.init_rand(2, 2, length)
@@ -51,6 +63,7 @@ psiHpsi = psi0.inner(psi)
 E = psiHpsi/psipsi
 print(E0)
 print(E)
+"""
 
 """
 physdim = 2
