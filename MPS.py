@@ -567,7 +567,7 @@ class mpo:
         self.tensors[0] = self.tensors[0].reshape(self.pd[2][0], self.vd[0])
         for n in range(1, self.length - 1):
             self.tensors[n] = self.tensors[n].reshape(self.vd[n-1], self.pd[2][n], self.vd[n])
-        self.tensors[-1] = self.tensors[-1].reshape(self.vd[n-1], self.pd[2][n])
+        self.tensors[-1] = self.tensors[-1].reshape(self.vd[-1], self.pd[2][n])
 
         # 复用MPS代码
         if self.center < 0:
@@ -583,7 +583,7 @@ class mpo:
         self.tensors[0] = self.tensors[0].reshape(self.pd[0][0], self.pd[1][0], self.vd[0])
         for n in range(1, self.length - 1):
             self.tensors[n] = self.tensors[n].reshape(self.vd[n-1], self.pd[0][n], self.pd[1][n], self.vd[n])
-        self.tensors[-1] = self.tensors[-1].reshape(self.vd[n-1], self.pd[0][n], self.pd[1][n])
+        self.tensors[-1] = self.tensors[-1].reshape(self.vd[-1], self.pd[0][-1], self.pd[1][-1])
         
 
     def normalize_center(self):

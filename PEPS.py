@@ -752,9 +752,10 @@ class peps:
         self.tensors[i][j] = tensor1
         self.tensors[i][j+1] = tensor2
     
-    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, times = 1, debug = False):
+    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, debug = False):
         """
-        :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
+        单步时间演化
+        :param hamiltonion: 时间演化二体哈密顿量
         :param tau: 模拟步长
         :param cut_dim: 裁剪维数，如果设置tol则为初始裁剪维数
         :param times: 模拟次数
@@ -764,11 +765,16 @@ class peps:
         if np.linalg.norm(np.imag(hamiltonion)) < 1e-15:
             hamiltonion = np.real(hamiltonion)
         hamiltonion = hamiltonion.reshape(self.pd[0][0], self.pd[0][0], self.pd[0][0], self.pd[0][0])
-        for _ in range(0, times):
-            for i in range(0, self.n):
-                for j in range(0, self.m-1):
-                    self.evolve_gate(hamiltonion, (i, j), (i, j+1), cut_dim=cut_dim, debug=debug)
-
+        for i in range(0, self.n):
+            for j in range(0, self.m-1):
+                self.evolve_gate(hamiltonion, (i, j), (i, j+1), cut_dim=cut_dim, debug=debug)
+    
+    def normalize(self):
+        norm = self.inner(self)
+        norm = np.power(norm, 1/(2 * self.n * self.m))
+        for i in range(0, self.n):
+            for j in range(0, self.m):
+                self.tensors[i][j] = self.tensors[i][j]/norm
 
             
 def svd_cut(matrix, cut_dim = -1):

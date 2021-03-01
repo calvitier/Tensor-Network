@@ -125,6 +125,12 @@ I = mim/m2
 print(I)
 """
 
+np.random.seed(0)
 x = PEPS.peps.init_rand(2, 5, (3, 3))
-H = op.heisenberg_hamilt([1]*3, [0]*3)
-x.TEBD(H)
+y = copy.deepcopy(x)
+sp = op.spin_operator() # 自旋算符字典
+I = np.kron(sp['i'], sp['i']).reshape(2, 2, 2, 2)   # 单位门
+y.evolve_gate(I, (1, 1), (1, 2))
+
+xy = (x.inner(y) ** 2) / (x.inner(x) * y.inner(y))
+print('(<x|y>^2)/(<x|x><y|y>) =', xy)
