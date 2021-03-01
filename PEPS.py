@@ -751,6 +751,23 @@ class peps:
 
         self.tensors[i][j] = tensor1
         self.tensors[i][j+1] = tensor2
+    
+    def TEBD(self, hamiltonion, tau = 1e-4, cut_dim = -1, times = 1, debug = False):
+        """
+        :param hamiltonion: 时间演化二体哈密顿量，不同哈密顿量使用list输入，相同直接输入矩阵
+        :param tau: 模拟步长
+        :param cut_dim: 裁剪维数，如果设置tol则为初始裁剪维数
+        :param times: 模拟次数
+
+        """
+        hamiltonion = expm(-1j * tau * hamiltonion) # e^(-iHt)
+        if np.linalg.norm(np.imag(hamiltonion)) < 1e-15:
+            hamiltonion = np.real(hamiltonion)
+        hamiltonion = hamiltonion.reshape(self.pd[0][0], self.pd[0][0], self.pd[0][0], self.pd[0][0])
+        for _ in range(0, times):
+            for i in range(0, self.n):
+                for j in range(0, self.m-1):
+                    self.evolve_gate(hamiltonion, (i, j), (i, j+1), cut_dim=cut_dim, debug=debug)
 
 
             

@@ -5,6 +5,7 @@ import MPS
 import copy
 import Operator as op
 
+"""
 np.random.seed(0)
 x = MPS.mps.init_rand(d = 2, chi = 5, length = 5)
 print('归一化前 <x|x> =', x.inner(x))
@@ -16,6 +17,7 @@ x = MPS.mps.init_rand(d = 2, chi = 5, length = 5)
 print('归一化前 <x|x> =', x.inner(x))
 x.center_orth(center = 2, normalize = True)
 print('归一化后 <x|x> =', x.inner(x))
+"""
 
 """
 d = 2
@@ -122,3 +124,7 @@ mim = m1.inner(m)
 I = mim/m2
 print(I)
 """
+
+x = PEPS.peps.init_rand(2, 5, (3, 3))
+H = op.heisenberg_hamilt([1]*3, [0]*3)
+x.TEBD(H)
